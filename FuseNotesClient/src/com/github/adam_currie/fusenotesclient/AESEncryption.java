@@ -50,10 +50,11 @@ import org.bouncycastle.crypto.params.ParametersWithIV;
  */
 class AESEncryption {
     private Charset charset = StandardCharsets.ISO_8859_1;
-    PaddedBufferedBlockCipher encryptCipher;
-    PaddedBufferedBlockCipher decryptCipher;
-    SecureRandom rand = new SecureRandom();
-    byte[] keyBytes;
+    private PaddedBufferedBlockCipher encryptCipher;
+    private PaddedBufferedBlockCipher decryptCipher;
+    private SecureRandom rand = new SecureRandom();
+    private byte[] keyBytes;
+    private String privateKeyStr;
     
     /*
      * Method           main
@@ -64,7 +65,8 @@ class AESEncryption {
         String cipherText = aes.encrypt("test string test string test string test string test string test string test string test string test string test string test string");
         
         String secret = aes.decrypt(cipherText);
-        
+        String emptyTest = aes.decrypt("");
+        String nullTest = aes.decrypt(null);
         return;
     }
     
@@ -75,6 +77,8 @@ class AESEncryption {
      *  String KeyStr   AES key in base64.      
      */
     AESEncryption(String keyStr) {
+        privateKeyStr = keyStr;
+        
         encryptCipher = new PaddedBufferedBlockCipher(new CBCBlockCipher(new AESEngine()));
         decryptCipher = new PaddedBufferedBlockCipher(new CBCBlockCipher(new AESEngine()));
         
@@ -87,6 +91,10 @@ class AESEncryption {
             throw new RuntimeException();
         }
         
+    }
+    
+    String getPrivateKeyStr(){
+        return privateKeyStr;
     }
     
     /*
@@ -143,7 +151,11 @@ class AESEncryption {
      * Returns
      *  String              decrypted payload
      */
-    String decrypt(String cipherText) throws UnsupportedEncodingException, InvalidCipherTextException{
+    String decrypt(String cipherText) throws InvalidCipherTextException{
+        if(cipherText == ""){
+            return "";
+        }
+        
         InputStream in = new ByteArrayInputStream(Base64.getDecoder().decode(cipherText));
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         
@@ -153,7 +165,7 @@ class AESEncryption {
             in.read(ivBytes, 0, ivBytes.length);
         }catch(IOException ex){
             Logger.getLogger(AESEncryption.class.getName()).log(Level.SEVERE, null, ex);
-            throw new InvalidCipherTextException();
+            throw new InvalidCipherTextException("Could not read initialization vector.");
         }
         ParametersWithIV params = new ParametersWithIV(new KeyParameter(keyBytes),ivBytes);
         decryptCipher.init(false, params);

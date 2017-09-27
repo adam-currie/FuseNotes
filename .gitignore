@@ -45,3 +45,6 @@ $RECYCLE.BIN/
 Network Trash Folder
 Temporary Items
 .apdisk
+/FuseNotesClient/dist/
+/FuseNotesDesktop/nbproject/private/
+/FuseNotesDesktop/build/

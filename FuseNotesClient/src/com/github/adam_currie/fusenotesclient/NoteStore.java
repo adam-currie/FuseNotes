@@ -38,7 +38,7 @@ import java.util.logging.Logger;
  *
  * @author Adam Currie
  */
-public class NoteStore{
+public class NoteStore implements NoteListener{
     
     static {
         try{
@@ -49,15 +49,22 @@ public class NoteStore{
         }
     }
     
-    private NoteListener listener;
+    private NoteStoreListener listener;
     private final String URL_STR = "http://localhost:8080/FuseNotesServer/NotesServlet";//todo
     private URL url;
     private NoteDatabase db;
-    private final String publicKey;
+    private final byte[] publicKeyBytes;
     private ArrayList<Note> notes = new ArrayList<>();//todo: maybe expose as unmodifiableList;
+    private final AESEncryption aes;
+    private final String privateKeyStr;
+    private final byte[] privateKeyBytes;
     
-    public NoteStore(String privateKeyStr, NoteListener noteListener) throws SQLException, InvalidKeyException{
-        publicKey = ECDSAUtil.publicKeyFromPrivate(privateKeyStr);
+    public NoteStore(String privateKeyStr, NoteStoreListener noteListener) throws SQLException, InvalidKeyException{       
+        this.privateKeyStr = privateKeyStr;
+        this.privateKeyBytes = ECDSAUtil.privateKeyToBytes(privateKeyStr);
+        
+        aes = new AESEncryption(privateKeyStr);
+        publicKeyBytes = ECDSAUtil.publicFromPrivate(ECDSAUtil.privateKeyToBytes(privateKeyStr));
         listener = noteListener;
         
         try{
@@ -68,27 +75,11 @@ public class NoteStore{
         }
         
         db = new LocalDB();
-        for(EncryptedNote encryptedNote : db.getAllNotes(publicKey)){
-            Note note = new Note(encryptedNote);
+        for(EncryptedNote encryptedNote : db.getAllNotes(publicKeyBytes)){
+            Note note = new Note(encryptedNote, privateKeyBytes, aes, this);
             notes.add(note);
             listener.noteLoaded(note);
         }
-    }
-    
-    //debug: test main
-    public static void main(String args[]) throws SQLException, InvalidKeyException{
-        NoteListener nl = new NoteListener() {
-            @Override
-            public void noteLoaded(Note note){
-                //todo
-            }
-
-            @Override
-            public void noteUpdateLoaded(Note note){
-                //todo
-            }
-        };
-        NoteStore ns = new NoteStore(generateKey(), nl);
     }
     
     /*
@@ -101,4 +92,66 @@ public class NoteStore{
         return ECDSAUtil.generatePrivateKeyStr();
     }
     
+    
+    /*
+     * Method               checkKeyValid
+     * Description          checks the validity of a key
+     * Params           
+     *  String key          private key in base 64
+     * Returns          
+     *  Boolean             whether the key is a valid ecdsa key
+     */
+    public static boolean checkKeyValid(String keyStr){
+        return ECDSAUtil.checkKeyValid(keyStr);
+    }
+    
+    
+    
+    
+    
+    //debug: test main
+    public static void main(String args[]) throws SQLException, InvalidKeyException{
+        NoteStoreListener nl = new NoteStoreListener() {
+            @Override
+            public void noteLoaded(Note note){
+                //todo
+            }
+
+            @Override
+            public void noteUpdateLoaded(Note note){
+                //todo
+            }
+        };
+        NoteStore ns = new NoteStore(generateKey(), nl);
+    }
+
+    /**
+     * Method               addNote
+     * Description          adds a new note
+     * @param waitForEdit   whether or not to wait for an edit before saving this note
+     */
+    public Note addNote(boolean waitForEdit){
+        Note note = new Note(privateKeyBytes, aes, this);
+        notes.add(note);
+        
+        if(!waitForEdit){
+            //todo: sync/save
+        }
+        
+        return note;
+    }
+    
+    public Note addNote(String noteBody){
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    public String getPrivateKey(){
+        return privateKeyStr;
+    }
+
+    @Override
+    public void noteEdited(Note note){
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
 }

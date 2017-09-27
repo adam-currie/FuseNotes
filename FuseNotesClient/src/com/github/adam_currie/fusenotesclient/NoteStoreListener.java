@@ -21,16 +21,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.github.adam_currie.fusenotesshared;
+package com.github.adam_currie.fusenotesclient;
 
-import java.util.ArrayList;
-
-/*
- * Name     NoteDatabase
- * Purpose  Data access layer for notes database.
+/**
+ *
+ * @author Adam Currie
  */
-public interface NoteDatabase{
-        public ArrayList<EncryptedNote> getAllNotes(byte[] userId);//todo, version of this in ServerDatabase that takes date
-        public void addOrUpdate(EncryptedNote note);
+public interface NoteStoreListener{
+    public void noteLoaded(Note note);
+    public void noteUpdateLoaded(Note note);
 }
-

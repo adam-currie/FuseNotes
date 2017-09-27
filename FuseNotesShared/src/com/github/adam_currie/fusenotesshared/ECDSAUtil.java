@@ -38,6 +38,7 @@ import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.crypto.signers.ECDSASigner;
 import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.util.Arrays;
 
 /*
  * Name     ECDSAUtil
@@ -56,7 +57,7 @@ public class ECDSAUtil{
         System.out.println("private key: " + privateKeyToBase64(priv));
         System.out.println("Public key:  " + publicKeyToBase64(pub));
         
-        System.out.println("public key from private: " + publicKeyToBase64(publicKeyFromPrivate(priv)));
+        System.out.println("public key from private: " + publicKeyToBase64(publicFromPrivate(priv)));
         
         System.out.println("public key to base64, back to key, and back to base64: " + 
                 publicKeyToBase64(base64ToPublicKey(publicKeyToBase64(pub)))
@@ -66,18 +67,24 @@ public class ECDSAUtil{
                 privateKeyToBase64(base64ToPrivateKey(privateKeyToBase64(priv)))
         );
         
+        System.out.println(checkSignature(pub, "hey", signStr(priv, "hey")));
+        System.out.println(checkSignature(pub, "1", signStr(priv, "1")));
+        System.out.println(checkSignature(pub, "sausage", signStr(priv, "sausage")));
+        System.out.println(checkSignature(pub, "pretzel", signStr(priv, "pretzel")));
+        System.out.println(checkSignature(pub, "pretzel", signStr(priv, "pretzel1")));
+        
         return;
     }
     
     /*
-     * Method                               publicKeyFromPrivate
+     * Method                               publicFromPrivate
      * Description                          get a public key from a private key
      * Params           
      *  ECPrivateKeyParameters privateKey   the private key
      * Returns          
      *  ECPublicKeyParameters               the public key
      */
-    public static ECPublicKeyParameters publicKeyFromPrivate(ECPrivateKeyParameters privateKey){
+    public static ECPublicKeyParameters publicFromPrivate(ECPrivateKeyParameters privateKey){
         //get params
         X9ECParameters curveParams = SECNamedCurves.getByName("secp256r1");
         ECDomainParameters domainParams = new ECDomainParameters(
@@ -86,18 +93,6 @@ public class ECDSAUtil{
         ECPoint q = domainParams.getG().multiply(privateKey.getD());
         
         return new ECPublicKeyParameters(q, domainParams);
-    }
-    
-    /*
-     * Method                       publicKeyFromPrivate
-     * Description                  get a public key from a private key
-     * Params           
-     *  String privateKey           the private key
-     * Returns          
-     *  String publicKey            the public key
-     */
-    public static String publicKeyFromPrivate(String privateKey) throws InvalidKeyException{
-        return publicKeyToBase64(publicKeyFromPrivate(base64ToPrivateKey(privateKey)));
     }
     
     /*
@@ -201,19 +196,43 @@ public class ECDSAUtil{
      *  ECPrivateKeyParameters key  private key to sign with
      *  String message              the message to sign
      * Returns          
-     *  String                      signature string
+     *  byte[]                      signature as 66 byte array
      */
-    public static String signStr(ECPrivateKeyParameters key, String message){
+    public static byte[] signStr(ECPrivateKeyParameters key, String message){
         byte[] msgBytes = message.getBytes(StandardCharsets.UTF_8);
         
         ECDSASigner signer = new ECDSASigner();
         signer.init(true, key);
         BigInteger[] rs = signer.generateSignature(msgBytes);
-        
-        String sigStr = Base64.getEncoder().encodeToString(rs[0].toByteArray()) + 
-                        Base64.getEncoder().encodeToString(rs[1].toByteArray());
 
-        return sigStr;
+        byte[] signature = new byte[66];
+        
+        byte[] r = rs[0].toByteArray();
+        byte[] s = rs[1].toByteArray();
+        
+        System.out.println(rs[0] + ", " + rs[1]);//debug
+        
+        //in the binary representation of a negative BigInteger leading 1's are inconsequential, and for positive values leading zeros are inconsequential
+        
+        //copy with leading zeros
+        System.arraycopy(r, 0, signature, 33-r.length, r.length);
+        //if the integer is negative, pad with leading 1's (-1 as a byte is 1111111 in binary)
+        if(r[0] < 0){
+            java.util.Arrays.fill(signature, 0, 33-r.length, (byte)-1);
+        }
+        
+        //copy with leading zeros
+        System.arraycopy(s, 0, signature, 66-s.length, s.length);
+        //if the integer is negative, pad with leading 1's (-1 as a byte is 1111111 in binary)
+        if(s[0] < 0){
+            java.util.Arrays.fill(signature, 33, 66-s.length, (byte)-1);
+        }
+        
+        return signature;//debug
+    }
+    
+    public static byte[] signStr(byte[] key, String message) throws InvalidKeyException{
+        return signStr(privateKeyFromBytes(key), message);
     }
     
     /*
@@ -225,16 +244,18 @@ public class ECDSAUtil{
      * Returns          
      *  boolean                     whether the signature matched
      */
-    public static boolean checkSignature(ECPublicKeyParameters key, String message, String signature){
+    public static boolean checkSignature(ECPublicKeyParameters key, String message, byte[] signature){
         byte[] msgBytes = message.getBytes(StandardCharsets.UTF_8);
         
         ECDSASigner signer = new ECDSASigner();
         signer.init(false, key);
         
-        byte[] rBytes = Base64.getDecoder().decode(signature.substring(0, 44));
-        byte[] sBytes = Base64.getDecoder().decode(signature.substring(44, 88));
+        byte[] r = Arrays.copyOfRange(signature, 0, 33);
+        byte[] s = Arrays.copyOfRange(signature, 33, 66);
         
-        return signer.verifySignature(msgBytes, new BigInteger(rBytes), new BigInteger(sBytes));
+        System.out.println(new BigInteger(r) + ", " + new BigInteger(s));//debug
+        
+        return signer.verifySignature(msgBytes, new BigInteger(r), new BigInteger(s));
     }
     
     /*
@@ -268,6 +289,40 @@ public class ECDSAUtil{
     public static String generatePrivateKeyStr(){
         ECPrivateKeyParameters key = (ECPrivateKeyParameters)ECDSAUtil.generateKeyPair().getPrivate();
         return ECDSAUtil.privateKeyToBase64(key);
+    }
+
+    public static byte[] privateKeyToBytes(String privateKey){
+        return Base64.getDecoder().decode(privateKey);
+    }
+
+    public static byte[] publicFromPrivate(byte[] privateKey) throws InvalidKeyException{
+        try{
+            //get params
+            X9ECParameters curveParams = SECNamedCurves.getByName("secp256r1");
+            ECDomainParameters domainParams = new ECDomainParameters(
+                curveParams.getCurve(), curveParams.getG(), curveParams.getN(), curveParams.getH(), curveParams.getSeed());
+
+            BigInteger keyInt = new BigInteger(privateKey);
+            ECPublicKeyParameters pub = publicFromPrivate(new ECPrivateKeyParameters(keyInt, domainParams));
+            
+            return pub.getQ().getEncoded(true);
+        }catch(ArrayIndexOutOfBoundsException | IllegalArgumentException ex){
+            throw new InvalidKeyException("Invalid key length.");
+        }
+    }
+
+    private static ECPrivateKeyParameters privateKeyFromBytes(byte[] key) throws InvalidKeyException{
+        try{
+            //get params
+            X9ECParameters curveParams = SECNamedCurves.getByName("secp256r1");
+            ECDomainParameters domainParams = new ECDomainParameters(
+                curveParams.getCurve(), curveParams.getG(), curveParams.getN(), curveParams.getH(), curveParams.getSeed());
+
+            BigInteger keyInt = new BigInteger(key);
+            return new ECPrivateKeyParameters(keyInt, domainParams);
+        }catch(ArrayIndexOutOfBoundsException | IllegalArgumentException ex){
+            throw new InvalidKeyException("Invalid key length.");
+        }
     }
     
 }

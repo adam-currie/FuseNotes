@@ -48,8 +48,7 @@ public class LocalDB implements NoteDatabase{
                         "creation DATETIME," +
                         "meta_edit DATETIME," +
                         "deleted BOOL," +
-                        "notebody TEXT," +
-                        "signature BINARY(65)," +
+                        "signature BINARY(66)," +
                         "PRIMARY KEY (note_id)" +
                     ")"
             );
@@ -63,7 +62,7 @@ public class LocalDB implements NoteDatabase{
                         "edit DATETIME," +
                         "deleted BOOL," +
                         "notebody TEXT," +
-                        "signature BINARY(65)," +
+                        "signature BINARY(66)," +
                         "PRIMARY KEY (note_id, fragment_id)" +
                     ")"
             );
@@ -72,7 +71,7 @@ public class LocalDB implements NoteDatabase{
     }    
     
     @Override
-    public ArrayList<EncryptedNote> getAllNotes(String userId){
+    public ArrayList<EncryptedNote> getAllNotes(byte[] userId){
         //todo
         return new ArrayList<EncryptedNote>();//debug
     }

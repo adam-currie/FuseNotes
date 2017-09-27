@@ -27,7 +27,7 @@ package com.github.adam_currie.fusenotesclient;
  *
  * @author Adam Currie
  */
-public interface NoteListener{
-    public void noteLoaded(Note note);
-    public void noteUpdateLoaded(Note note);
+interface NoteListener{
+    //todo: change so that the listener knows which note fragments were edited so that only those need to be synced/saved
+    void noteEdited(Note note);
 }
