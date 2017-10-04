@@ -153,8 +153,9 @@ public class MainJFrame extends javax.swing.JFrame implements NoteStoreListener{
     }//GEN-LAST:event_changePassButtonActionPerformed
 
     private void addButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_addButtonActionPerformed
-        NoteJPanel note = new NoteJPanel(notes.addNote(true), this);
-        notesListPanel.add(note);
+        NoteJPanel notePanel = new NoteJPanel(notes.addNote(true), this);
+        notesListPanel.add(notePanel);
+        notePanel.requestFocus();
         notesListPanel.revalidate();
     }//GEN-LAST:event_addButtonActionPerformed
 

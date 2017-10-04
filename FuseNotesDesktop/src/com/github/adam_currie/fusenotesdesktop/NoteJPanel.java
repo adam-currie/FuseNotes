@@ -231,6 +231,11 @@ public class NoteJPanel extends javax.swing.JPanel{
         noteTextArea.setText(note.getNoteBody());
     }//GEN-LAST:event_cancelButtonActionPerformed
 
+    @Override
+    public void requestFocus(){
+        noteTextArea.requestFocus();
+    }
+    
     private void saveButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_saveButtonActionPerformed
         note.setNoteBody(noteTextArea.getText());
         editedLabel.setText("edited: " + dateFormat.format(note.getEditDate()));
