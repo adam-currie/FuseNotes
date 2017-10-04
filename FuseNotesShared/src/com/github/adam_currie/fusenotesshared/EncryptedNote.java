@@ -23,35 +23,35 @@
  */
 package com.github.adam_currie.fusenotesshared;
 
-import java.security.InvalidKeyException;
 import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 
 
 /**
  *
  * @author Adam Currie
  */
-public class EncryptedNote{
+public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     private static final SecureRandom random = new SecureRandom();
     
     private byte[] noteId = new byte[12];
-    private byte[] userId = new byte[33];
     private Timestamp createDate;
     private Timestamp metaEditDate;
     private boolean isDeleted;
     private byte[] signature = new byte[66];
+    private com.github.adam_currie.fusenotesshared.ECDSASigner signer;
     
-    //newest fragment at index 0 //todo: check
+    //newest fragment at index 0
     private ArrayList<Fragment> sortedFragments = new ArrayList<Fragment>() {
         @Override
         public boolean add(Fragment frag){
             super.add(frag);
-            Collections.sort(this);
+            Collections.sort(this, Collections.reverseOrder());
             return true;
         }
     };
@@ -59,38 +59,54 @@ public class EncryptedNote{
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     
     //todo: maybe check signature stuff in constructor, and logical checks
-    //clones the byte arrays
-    public EncryptedNote(byte[] noteId, byte[] userId, Timestamp createDate, Timestamp editDate, boolean isDeleted, byte[] signature){
+    //clones the byte arrays and timestamps
+    public EncryptedNote(byte[] noteId, ECDSASigner signer, Timestamp createDate, Timestamp editDate, boolean isDeleted, byte[] signature){
         this.noteId = noteId.clone();
-        this.userId = userId.clone();
-        this.createDate = createDate;
-        this.metaEditDate = editDate;
+        this.createDate = (Timestamp)createDate.clone();
+        this.metaEditDate = (Timestamp)editDate.clone();
         this.isDeleted = isDeleted;
-        this.signature = noteId.clone();
+        this.signature = signature.clone();
+        this.signer = signer;
     }
     
-    //clones the userId
-    public EncryptedNote(byte[] userId){
-        this.userId = userId.clone();
+    public EncryptedNote(ECDSASigner signer){
         random.nextBytes(noteId);
         createDate = new Timestamp(System.currentTimeMillis());
         metaEditDate = new Timestamp(System.currentTimeMillis());
         isDeleted = false;
-    }
-
-    public void setNoteBody(String encryptedNoteBody, byte[] signingKey) throws InvalidKeyException{
-        sortedFragments.add(new Fragment(encryptedNoteBody, signingKey));
-    }
-
-    public Timestamp getCreateDate(){
-        return (Timestamp)createDate.clone();
+        
+        this.signer = signer;
+        
+        signature = signer.sign(Arrays.toString(noteId) + createDate + metaEditDate + isDeleted);
     }
     
-    /*
-     * Method           getEditDate
-     * Description      returns the last time the meta data changed or a fragment was added
-     * Returns
-     *  Timestamp       edit date/time
+    /**
+     * 
+     * @param encryptedNoteBody the encrypted note body
+     * @return  a portion of the EncryptedNote with only the changed fragments
+     */
+    public EncryptedNote setNoteBody(String encryptedNoteBody){
+        Fragment frag = new Fragment(encryptedNoteBody);
+        sortedFragments.add(frag);
+        ArrayList<Fragment> subList = new ArrayList<>(1);
+        subList.add(frag);
+        return getSubNote(subList);
+    }
+
+    /**
+     * Returns the creation date of the note.
+     * Must be cloned to avoid changing underlying data.
+     * @return the creation date
+     */
+    public Timestamp getCreateDate(){
+        return createDate;
+    }
+    
+    /**
+     * Returns the last time the note was edited(meta data changed or fragment added).
+     * Must be cloned to avoid changing underlying data.
+     * Use {@link #getMetaEditDate() getMetaEditDate} to get just the last time the meta data of the note itself changed.
+     * @return last edited date/time
      */
     public Timestamp getEditDate(){
         Timestamp latest = metaEditDate;
@@ -99,7 +115,18 @@ public class EncryptedNote{
             latest = sortedFragments.get(0).getCreateDate();
         }
         
-        return (Timestamp)latest.clone();
+        return latest;
+    }
+    
+    /**
+     * Returns the last time the meta data of the note changed.
+     * This date is only updated when information about the note itself is changed, as opposed to a fragment.
+     * Use {@link #getEditDate() getEditDate} to get the last time the note or the latest fragment changed.
+     * Must be cloned to avoid changing underlying data.
+     * @return the edit date/time
+     */
+    public Timestamp getMetaEditDate(){
+        return metaEditDate;
     }
 
     public String getNoteBody(){
@@ -110,7 +137,59 @@ public class EncryptedNote{
         }
     }
 
-    class Fragment implements Comparable<Fragment>{        
+    public ECDSASigner getSigner(){
+        return signer;
+    }
+
+    private EncryptedNote getSubNote(ArrayList<Fragment> subList){
+        EncryptedNote subNote = new EncryptedNote(noteId, signer, createDate, metaEditDate, isDeleted, signature);
+        
+        for(Fragment frag : subList){
+            Fragment copy = subNote.new Fragment(frag.fragmentId, frag.fragCreateDate, frag.fragEditDate, frag.noteBody, frag.fragIsDeleted, frag.fragSignature);
+            subNote.sortedFragments.add(copy);
+        }
+        
+        return subNote;
+    }
+
+    /**
+     * Gets the note id.
+     * Must be cloned to avoid changing underlying array.
+     * @return the note id
+     */
+    public byte[] getNoteId(){
+        return noteId;
+    }
+
+    public byte[] getUserID(){
+        return signer.getPublicKeyBytes();
+    }
+
+    public boolean getDeleted(){
+        return isDeleted;
+    }
+    
+    /**
+     * Gets the notes signature.
+     * Must be cloned to avoid changing underlying array.
+     * @return the signature
+     */
+    public byte[] getSignature(){
+        return signature;
+    }
+
+    @Override
+    public Iterator<Fragment> iterator(){
+        return sortedFragments.iterator();
+    }
+
+    public void addFragment(byte[] id, Timestamp create, Timestamp edit, String body, boolean deleted, byte[] sig){
+        Fragment frag = new Fragment(id, create, edit, body, deleted, sig);
+        sortedFragments.add(frag);
+    }
+    
+    
+    public class Fragment implements Comparable<Fragment>{        
         private byte[] fragmentId = new byte[6];
         private Timestamp fragCreateDate;
         private Timestamp fragEditDate;
@@ -118,19 +197,37 @@ public class EncryptedNote{
         private String noteBody;
         private byte[] fragSignature = new byte[66];
         
-        private Fragment(String encryptedNoteBody, byte[] signingKey) throws InvalidKeyException{
+        private Fragment(String encryptedNoteBody){
             random.nextBytes(fragmentId);
             fragCreateDate = new Timestamp(System.currentTimeMillis());
             fragEditDate = new Timestamp(System.currentTimeMillis());
             fragIsDeleted = false;
             noteBody = encryptedNoteBody;
             
-            fragSignature = ECDSAUtil.signStr(signingKey, noteBody + Arrays.toString(noteId) + Arrays.toString(fragmentId) + fragCreateDate + fragEditDate + fragIsDeleted);
+            fragSignature = signer.sign(noteBody + Arrays.toString(noteId) + Arrays.toString(fragmentId) + fragCreateDate + fragEditDate + fragIsDeleted);
         }
 
+        /**
+         * Creates a note fragment associated with this note.
+         * Clones the byte arrays and timestamps.
+         */
+        private Fragment(byte[] id, Timestamp create, Timestamp edit, String body, boolean deleted, byte[] sig){
+            fragmentId = id.clone();
+            fragCreateDate = (Timestamp)create.clone();
+            fragEditDate = (Timestamp)edit.clone();
+            noteBody = body;
+            fragIsDeleted = deleted;
+            fragSignature = sig.clone();
+        }
+
+        /**
+         * Gets the creation date of this fragment.
+         * Must be cloned to avoid changing underlying data.
+         * @return  the creation date
+         */
         public Timestamp getCreateDate(){
-        return (Timestamp)fragCreateDate.clone();
-    }
+            return fragCreateDate;
+        }
 
         @Override
         public int compareTo(Fragment o){
@@ -142,9 +239,48 @@ public class EncryptedNote{
                 return 0;
             }
         }
-
-        private String getNoteBody(){
+        
+        /**
+         * Gets the encrypted note text;
+         * @return the encrypted note text
+         */
+        public String getNoteBody(){
             return noteBody;
+        }
+
+        /**
+         * Gets the id of this fragment.
+         * Must be cloned to avoid changing underlying data.
+         * @return  the fragment id 
+         */
+        public byte[] getFragmentId(){
+            return fragmentId;
+        }
+
+        /**
+         * Gets the edit date of this fragment.
+         * Must be cloned to avoid changing underlying data.
+         * @return  the edit date
+         */
+        public Timestamp getEditDate(){
+            return fragEditDate;
+        }
+        
+        /**
+         * Gets the deletion status of this particular fragment.
+         * @return whether the fragment is deleted
+         */
+        public boolean getDeleted(){
+            return fragIsDeleted;
+        }
+        
+        /**
+         * Gets the signature of this fragment.
+         * Must be cloned to avoid changing underlying data.
+         * @return  the signature
+         */
+        public byte[] getSignature(){
+            return fragSignature;
         }
     }
     

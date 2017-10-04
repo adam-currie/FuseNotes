@@ -23,11 +23,17 @@
  */
 package com.github.adam_currie.fusenotesclient;
 
+import com.github.adam_currie.fusenotesshared.EncryptedNote;
+
 /**
  *
  * @author Adam Currie
  */
 interface NoteListener{
-    //todo: change so that the listener knows which note fragments were edited so that only those need to be synced/saved
-    void noteEdited(Note note);
+    /**
+     * 
+     * @param note      the note
+     * @param subNote   a portion of the EncryptedNote with only the changed fragments
+     */
+    void noteChanged(Note note, EncryptedNote subNote);
 }

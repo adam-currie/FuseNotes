@@ -23,14 +23,11 @@
  */
 package com.github.adam_currie.fusenotesclient;
 
-import com.github.adam_currie.fusenotesshared.ECDSAUtil;
-import com.github.adam_currie.fusenotesshared.EncryptedNote;
-import java.security.InvalidKeyException;
+import com.github.adam_currie.fusenotesshared.*;
 import java.sql.Timestamp;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.bouncycastle.crypto.InvalidCipherTextException;
-import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 
 /**
  *
@@ -40,33 +37,28 @@ public class Note{
     private EncryptedNote encryptedNote;
     private NoteListener noteListener;
     private AESEncryption aes;
-    private final byte[] privateKey;
     
     
     //todo: client changes things with setters, these setters change the underlying not and trigger the updated note to be saved to the db and sent to the server
     
     //hidden from public
     //listener is for internal use
-    Note(EncryptedNote encryptedNote, byte[] privateKey, AESEncryption aes, NoteListener listener){
+    Note(EncryptedNote encryptedNote, AESEncryption aes, NoteListener listener){
+        if(!encryptedNote.getSigner().canSign()){
+            throw new IllegalArgumentException("encryptedNote is not setup for signing");
+        }
+        
         this.encryptedNote = encryptedNote;
         noteListener = listener;
         this.aes = aes;
-        this.privateKey = privateKey.clone();
-        //todo
     }
     
     //hidden from public
     //listener is for internal use
-    Note(byte[] privateKey, AESEncryption aes, NoteListener listener){
-        this.privateKey = privateKey.clone();
+    Note(ECDSASigner signer, AESEncryption aes, NoteListener listener){
+        encryptedNote = new EncryptedNote(signer);
         this.aes = aes;
-        try{
-            encryptedNote = new EncryptedNote(ECDSAUtil.publicFromPrivate(privateKey));
-        }catch(InvalidKeyException ex){
-            //todo, check validity of this key first in constructor
-            Logger.getLogger(Note.class.getName()).log(Level.SEVERE, "todo, check validity of this key first in constructor", ex);
-            System.exit(-1);
-        }
+        noteListener = listener;
     }
 
 /*
@@ -76,7 +68,7 @@ public class Note{
      *  Timestamp       creation date/time
      */
     public Timestamp getCreateDate(){
-        return encryptedNote.getCreateDate();
+        return (Timestamp)encryptedNote.getCreateDate().clone();
     }
         
     /*
@@ -105,11 +97,8 @@ public class Note{
     }
 
     public void setNoteBody(String text){
-        try{
-        }catch(InvalidKeyException ex){
-            Logger.getLogger(Note.class.getName()).log(Level.SEVERE, "todo: check validity of key when set so that this cant happen", ex);
-            System.exit(-1);
-        }
+        EncryptedNote subNote = encryptedNote.setNoteBody(aes.encrypt(text));
+        noteListener.noteChanged(this, subNote);
     }
 
     /*
@@ -118,6 +107,10 @@ public class Note{
      */
     public void delete(){
         throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    EncryptedNote getEncryptedNote(){
+        return encryptedNote;
     }
     
 }

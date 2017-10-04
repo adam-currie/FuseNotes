@@ -23,12 +23,17 @@
  */
 package com.github.adam_currie.fusenotesclient;
 
+import com.github.adam_currie.fusenotesshared.ECDSASigner;
 import com.github.adam_currie.fusenotesshared.EncryptedNote;
 import com.github.adam_currie.fusenotesshared.NoteDatabase;
+import com.sun.istack.internal.FragmentContentHandler;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 
 /**
@@ -61,7 +66,7 @@ public class LocalDB implements NoteDatabase{
                         "creation DATETIME," +
                         "edit DATETIME," +
                         "deleted BOOL," +
-                        "notebody TEXT," +
+                        "note_body TEXT," +
                         "signature BINARY(66)," +
                         "PRIMARY KEY (note_id, fragment_id)" +
                     ")"
@@ -71,14 +76,89 @@ public class LocalDB implements NoteDatabase{
     }    
     
     @Override
-    public ArrayList<EncryptedNote> getAllNotes(byte[] userId){
-        //todo
-        return new ArrayList<EncryptedNote>();//debug
+    public ArrayList<EncryptedNote> getAllNotes(ECDSASigner signerOrVerfier) throws SQLException{
+        try(Connection connection = DriverManager.getConnection(URL_STR)) {      
+            PreparedStatement statement = connection.prepareStatement(
+                    "SELECT * FROM note WHERE user_id=?");
+            statement.setBytes(1, signerOrVerfier.getPublicKeyBytes());
+            ResultSet noteResults = statement.executeQuery();
+            
+            //setup for getting fragments
+            statement = connection.prepareStatement(
+                    "SELECT * FROM note_fragment WHERE note_id=?");
+            
+            ArrayList<EncryptedNote> notes = new ArrayList();
+            while(noteResults.next()){
+                
+                //GET NOTE META DATA
+                EncryptedNote note = new EncryptedNote(
+                    noteResults.getBytes("note_id"),
+                    signerOrVerfier,
+                    noteResults.getTimestamp("creation"),
+                    noteResults.getTimestamp("meta_edit"),
+                    noteResults.getBoolean("deleted"),
+                    noteResults.getBytes("signature")
+                );
+                
+                //GET NOTE FRAGMENTS
+                statement.setBytes(1, note.getNoteId());
+                ResultSet fragResults = statement.executeQuery();
+                while(fragResults.next()){
+                    note.addFragment(
+                        fragResults.getBytes("fragment_id"),
+                        fragResults.getTimestamp("creation"),
+                        fragResults.getTimestamp("edit"),
+                        fragResults.getString("note_body"),
+                        fragResults.getBoolean("deleted"),
+                        fragResults.getBytes("signature")
+                    );
+                }
+                
+                notes.add(note);
+            }
+            
+            return notes;
+        }
     }
 
     @Override
-    public void addOrUpdate(EncryptedNote note){
-        throw new UnsupportedOperationException("Not supported yet.");
+    public void addOrUpdate(EncryptedNote note) throws SQLException{
+        try(Connection connection = DriverManager.getConnection(URL_STR)){
+            connection.setAutoCommit(false);
+            
+            //META DATA
+            PreparedStatement statement = connection.prepareStatement(
+                    "REPLACE INTO note (note_id,user_id,creation,meta_edit,deleted,signature) VALUES (?, ?, ?, ?, ?, ?) ");
+
+            statement.setBytes(1, note.getNoteId());
+            statement.setBytes(2, note.getUserID());
+            statement.setTimestamp(3, note.getCreateDate());
+            statement.setTimestamp(4, note.getMetaEditDate());
+            statement.setBoolean(5, note.getDeleted());
+            statement.setBytes(6, note.getSignature());
+            
+            statement.execute();  
+            
+            //FRAGMENTS    
+            statement = connection.prepareStatement(
+                    "REPLACE INTO note_fragment (note_id,fragment_id,creation,edit,deleted,note_body,signature) VALUES (?, ?, ?, ?, ?, ?, ?) ");
+            
+            for(EncryptedNote.Fragment frag : note){
+                statement.setBytes(1, note.getNoteId());
+                statement.setBytes(2, frag.getFragmentId());
+                statement.setTimestamp(3, frag.getCreateDate());
+                statement.setTimestamp(4, frag.getEditDate());
+                statement.setBoolean(5, frag.getDeleted());
+                statement.setString(6, frag.getNoteBody());
+                statement.setBytes(7, frag.getSignature());
+                
+                statement.addBatch();
+            }
+            
+            statement.executeBatch();
+            
+            connection.commit();
+        }
     }
     
 }

@@ -23,6 +23,7 @@
  */
 package com.github.adam_currie.fusenotesclient;
 
+import com.github.adam_currie.fusenotesshared.ECDSASigner;
 import com.github.adam_currie.fusenotesshared.ECDSAUtil;
 import com.github.adam_currie.fusenotesshared.EncryptedNote;
 import com.github.adam_currie.fusenotesshared.NoteDatabase;
@@ -33,6 +34,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jdk.nashorn.internal.runtime.JSType;
 
 /**
  *
@@ -49,23 +51,19 @@ public class NoteStore implements NoteListener{
         }
     }
     
-    private NoteStoreListener listener;
+    private NoteStoreListener storeListener;
     private final String URL_STR = "http://localhost:8080/FuseNotesServer/NotesServlet";//todo
     private URL url;
     private NoteDatabase db;
-    private final byte[] publicKeyBytes;
     private ArrayList<Note> notes = new ArrayList<>();//todo: maybe expose as unmodifiableList;
     private final AESEncryption aes;
-    private final String privateKeyStr;
-    private final byte[] privateKeyBytes;
+    private final ECDSASigner signer;
     
-    public NoteStore(String privateKeyStr, NoteStoreListener noteListener) throws SQLException, InvalidKeyException{       
-        this.privateKeyStr = privateKeyStr;
-        this.privateKeyBytes = ECDSAUtil.privateKeyToBytes(privateKeyStr);
-        
+    public NoteStore(String privateKeyStr, NoteStoreListener storeListener) throws SQLException, InvalidKeyException{               
         aes = new AESEncryption(privateKeyStr);
-        publicKeyBytes = ECDSAUtil.publicFromPrivate(ECDSAUtil.privateKeyToBytes(privateKeyStr));
-        listener = noteListener;
+        signer = new ECDSASigner(ECDSAUtil.toPrivateKeyParams(privateKeyStr));
+        
+        this.storeListener = storeListener;
         
         try{
             url = new URL(URL_STR);
@@ -75,10 +73,10 @@ public class NoteStore implements NoteListener{
         }
         
         db = new LocalDB();
-        for(EncryptedNote encryptedNote : db.getAllNotes(publicKeyBytes)){
-            Note note = new Note(encryptedNote, privateKeyBytes, aes, this);
+        for(EncryptedNote encryptedNote : db.getAllNotes(signer)){
+            Note note = new Note(encryptedNote, aes, this);
             notes.add(note);
-            listener.noteLoaded(note);
+            storeListener.noteLoaded(note);
         }
     }
     
@@ -104,11 +102,7 @@ public class NoteStore implements NoteListener{
     public static boolean checkKeyValid(String keyStr){
         return ECDSAUtil.checkKeyValid(keyStr);
     }
-    
-    
-    
-    
-    
+
     //debug: test main
     public static void main(String args[]) throws SQLException, InvalidKeyException{
         NoteStoreListener nl = new NoteStoreListener() {
@@ -131,11 +125,18 @@ public class NoteStore implements NoteListener{
      * @param waitForEdit   whether or not to wait for an edit before saving this note
      */
     public Note addNote(boolean waitForEdit){
-        Note note = new Note(privateKeyBytes, aes, this);
+        Note note = new Note(signer, aes, this);
         notes.add(note);
         
         if(!waitForEdit){
-            //todo: sync/save
+            try{
+                db.addOrUpdate(note.getEncryptedNote());
+            }catch(SQLException ex){
+                Logger.getLogger(NoteStore.class.getName()).log(Level.SEVERE, null, ex);
+                //todo retry
+            }
+            
+            //todo: send to server and stuff
         }
         
         return note;
@@ -146,12 +147,17 @@ public class NoteStore implements NoteListener{
     }
 
     public String getPrivateKey(){
-        return privateKeyStr;
+        return signer.getPrivateKeyString();
     }
 
     @Override
-    public void noteEdited(Note note){
-        throw new UnsupportedOperationException("Not supported yet.");
+    public void noteChanged(Note note, EncryptedNote subNote){
+        try{
+            db.addOrUpdate(subNote);
+        }catch(SQLException ex){
+            Logger.getLogger(NoteStore.class.getName()).log(Level.SEVERE, null, ex);
+            //todo retry
+        }
     }
 
 }

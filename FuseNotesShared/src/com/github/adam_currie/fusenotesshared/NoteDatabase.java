@@ -23,6 +23,7 @@
  */
 package com.github.adam_currie.fusenotesshared;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 
 /*
@@ -30,7 +31,10 @@ import java.util.ArrayList;
  * Purpose  Data access layer for notes database.
  */
 public interface NoteDatabase{
-        public ArrayList<EncryptedNote> getAllNotes(byte[] userId);//todo, version of this in ServerDatabase that takes date
-        public void addOrUpdate(EncryptedNote note);
+    
+    //attaches signerOrVerifier to the loaded notes, also used to specify the userId/public key associated with the notes 
+    public ArrayList<EncryptedNote> getAllNotes(ECDSASigner signerOrVerifier) throws SQLException;//todo, version of this in ServerDatabase that takes date
+    
+    public void addOrUpdate(EncryptedNote note) throws SQLException;
 }
 
