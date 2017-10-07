@@ -33,7 +33,7 @@ interface NoteListener{
     /**
      * 
      * @param note      the note
-     * @param subNote   a portion of the EncryptedNote with only the changed fragments
+     * @param partialSnapshot   a partialSnapshot of the EncryptedNote with only the changed fragments
      */
-    void noteChanged(Note note, EncryptedNote subNote);
+    void noteChanged(Note note, EncryptedNote partialSnapshot);
 }

@@ -25,46 +25,33 @@ package com.github.adam_currie.fusenotesshared;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.security.InvalidKeyException;
 import java.util.Arrays;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
+import org.bouncycastle.crypto.signers.ECDSASigner;
 
 /**
  *
  * @author Adam Currie
  */
-public class ECDSASigner{
-    private final org.bouncycastle.crypto.signers.ECDSASigner signer;
-    private final org.bouncycastle.crypto.signers.ECDSASigner verifier;
+public class ThreadSafeECDSASigner{
     private final ECPrivateKeyParameters privateKey;
     private final ECPublicKeyParameters publicKey;
     
     //initialize for signing and verifying
-    public ECDSASigner(ECPrivateKeyParameters key) throws InvalidKeyException{
-        signer = new org.bouncycastle.crypto.signers.ECDSASigner();
-        verifier = new org.bouncycastle.crypto.signers.ECDSASigner();
-        
+    public ThreadSafeECDSASigner(ECPrivateKeyParameters key){        
         this.privateKey = key;
         this.publicKey = ECDSAUtil.toPublicKeyParams(privateKey);
-        
-        signer.init(true, privateKey);        
-        verifier.init(false, publicKey);
     }
     
     //initialize for verifying
-    public ECDSASigner(ECPublicKeyParameters key){
-        signer = null;
-        verifier = new org.bouncycastle.crypto.signers.ECDSASigner();
-        
+    public ThreadSafeECDSASigner(ECPublicKeyParameters key){
         this.privateKey = null;
         this.publicKey = ECDSAUtil.toPublicKeyParams(privateKey);
-             
-        verifier.init(false, publicKey);
     }
     
     public boolean canSign(){
-        return signer != null;
+        return privateKey != null;
     }
 
     byte[] sign(String message){
@@ -73,6 +60,9 @@ public class ECDSASigner{
         }
         
         byte[] msgBytes = message.getBytes(StandardCharsets.UTF_8);
+        
+        ECDSASigner signer = new org.bouncycastle.crypto.signers.ECDSASigner();
+        signer.init(true, privateKey);
         
         BigInteger[] rs = signer.generateSignature(msgBytes);
 
@@ -100,11 +90,14 @@ public class ECDSASigner{
         return signature;//debug
     }
     
-    public boolean checkSignature(ECPublicKeyParameters key, String message, byte[] signature){
+    public boolean checkSignature(String message, byte[] signature){
         byte[] msgBytes = message.getBytes(StandardCharsets.UTF_8);
         
         byte[] r = Arrays.copyOfRange(signature, 0, 33);
         byte[] s = Arrays.copyOfRange(signature, 33, 66);
+        
+        ECDSASigner verifier = new ECDSASigner();
+        verifier.init(false, publicKey);
         
         return verifier.verifySignature(msgBytes, new BigInteger(r), new BigInteger(s));
     }

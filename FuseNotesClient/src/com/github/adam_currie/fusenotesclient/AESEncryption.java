@@ -45,16 +45,26 @@ import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 
 /*
- * Name     AESEncryption
- * Purpose  Encryption and decryption of messages.
+ * Provides threadsafe encryption and decryption of messages.
  */
 class AESEncryption {
-    private Charset charset = StandardCharsets.ISO_8859_1;
-    private PaddedBufferedBlockCipher encryptCipher;
-    private PaddedBufferedBlockCipher decryptCipher;
-    private SecureRandom rand = new SecureRandom();
-    private byte[] keyBytes;
-    private String privateKeyStr;
+    private final Charset charset = StandardCharsets.ISO_8859_1;
+    private final SecureRandom rand = new SecureRandom();
+    private final byte[] keyBytes;
+    private final String privateKeyStr;
+    
+    private static final ThreadLocal<PaddedBufferedBlockCipher> encryptCipher = new ThreadLocal<PaddedBufferedBlockCipher>(){
+        @Override
+        protected PaddedBufferedBlockCipher initialValue() {
+            return new PaddedBufferedBlockCipher(new CBCBlockCipher(new AESEngine()));
+        };
+    };
+    private static final ThreadLocal<PaddedBufferedBlockCipher> decryptCipher = new ThreadLocal<PaddedBufferedBlockCipher>(){
+        @Override
+        protected PaddedBufferedBlockCipher initialValue() {
+            return new PaddedBufferedBlockCipher(new CBCBlockCipher(new AESEngine()));
+        };
+    };
     
     /*
      * Method           main
@@ -77,11 +87,7 @@ class AESEncryption {
      *  String KeyStr   AES key in base64.      
      */
     AESEncryption(String keyStr) {
-        privateKeyStr = keyStr;
-        
-        encryptCipher = new PaddedBufferedBlockCipher(new CBCBlockCipher(new AESEngine()));
-        decryptCipher = new PaddedBufferedBlockCipher(new CBCBlockCipher(new AESEngine()));
-        
+        privateKeyStr = keyStr;        
         try{
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             md.update(keyStr.getBytes(charset));
@@ -110,10 +116,10 @@ class AESEncryption {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         
         //prepare encryptCipher
-        byte[] ivBytes = new byte[encryptCipher.getBlockSize()];
+        byte[] ivBytes = new byte[encryptCipher.get().getBlockSize()];
 	    rand.nextBytes(ivBytes);        
         ParametersWithIV params = new ParametersWithIV(new KeyParameter(keyBytes),ivBytes);
-        encryptCipher.init(true, params);
+        encryptCipher.get().init(true, params);
         
         //add iv to cipherText
         out.write(ivBytes, 0, ivBytes.length);
@@ -125,11 +131,11 @@ class AESEncryption {
         byte[] obuf = new byte[32];
         try{
             while ((numBytesRead = in.read(buf)) >= 0) {
-                numBytesProcessed = encryptCipher.processBytes(buf, 0, numBytesRead, obuf, 0);
+                numBytesProcessed = encryptCipher.get().processBytes(buf, 0, numBytesRead, obuf, 0);
                 out.write(obuf, 0, numBytesProcessed);
             }
         
-            numBytesProcessed = encryptCipher.doFinal(obuf, 0);
+            numBytesProcessed = encryptCipher.get().doFinal(obuf, 0);
             out.write(obuf, 0, numBytesProcessed);
             out.flush();
             in.close();
@@ -138,7 +144,7 @@ class AESEncryption {
             Logger.getLogger(AESEncryption.class.getName()).log(Level.SEVERE, null, ex);
         }
         
-        encryptCipher.reset();
+        encryptCipher.get().reset();
         
         return Base64.getEncoder().encodeToString(out.toByteArray());      
     }
@@ -160,7 +166,7 @@ class AESEncryption {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         
         //prepare encryptCipher
-        byte[] ivBytes = new byte[decryptCipher.getBlockSize()];
+        byte[] ivBytes = new byte[decryptCipher.get().getBlockSize()];
         try{
             in.read(ivBytes, 0, ivBytes.length);
         }catch(IOException ex){
@@ -168,7 +174,7 @@ class AESEncryption {
             throw new InvalidCipherTextException("Could not read initialization vector.");
         }
         ParametersWithIV params = new ParametersWithIV(new KeyParameter(keyBytes),ivBytes);
-        decryptCipher.init(false, params);
+        decryptCipher.get().init(false, params);
         
         //process
         int numBytesRead;
@@ -177,11 +183,11 @@ class AESEncryption {
         byte[] obuf = new byte[16];
         try{
             while ((numBytesRead = in.read(buf)) >= 0) {
-                numBytesProcessed = decryptCipher.processBytes(buf, 0, numBytesRead, obuf, 0);
+                numBytesProcessed = decryptCipher.get().processBytes(buf, 0, numBytesRead, obuf, 0);
                 out.write(obuf, 0, numBytesProcessed);
             }
         
-            numBytesProcessed = decryptCipher.doFinal(obuf, 0);
+            numBytesProcessed = decryptCipher.get().doFinal(obuf, 0);
             out.write(obuf, 0, numBytesProcessed);
             out.flush();
             in.close();
@@ -190,7 +196,7 @@ class AESEncryption {
             Logger.getLogger(AESEncryption.class.getName()).log(Level.SEVERE, null, ex);
         }
         
-        decryptCipher.reset();
+        decryptCipher.get().reset();
         
         return new String(out.toByteArray(), charset);
     }

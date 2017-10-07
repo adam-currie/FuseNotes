@@ -34,9 +34,9 @@ import org.bouncycastle.crypto.InvalidCipherTextException;
  * @author Adam Currie
  */
 public class Note{
-    private EncryptedNote encryptedNote;
-    private NoteListener noteListener;
-    private AESEncryption aes;
+    private final EncryptedNote encryptedNote;
+    private final NoteListener noteListener;
+    private final AESEncryption aes;
     
     
     //todo: client changes things with setters, these setters change the underlying not and trigger the updated note to be saved to the db and sent to the server
@@ -47,15 +47,17 @@ public class Note{
         if(!encryptedNote.getSigner().canSign()){
             throw new IllegalArgumentException("encryptedNote is not setup for signing");
         }
-        
         this.encryptedNote = encryptedNote;
         noteListener = listener;
         this.aes = aes;
     }
     
     //hidden from public
-    //listener is for internal use
-    Note(ECDSASigner signer, AESEncryption aes, NoteListener listener){
+    //listener is for internal use(within the package)
+    Note(ThreadSafeECDSASigner signer, AESEncryption aes, NoteListener listener){
+        if(!signer.canSign()){
+            throw new IllegalArgumentException("signer is not setup for signing");
+        }
         encryptedNote = new EncryptedNote(signer);
         this.aes = aes;
         noteListener = listener;
@@ -106,11 +108,16 @@ public class Note{
      * Description              deletes the note and all versions of it
      */
     public void delete(){
-        throw new UnsupportedOperationException("Not supported yet.");
+        encryptedNote.delete();
+        noteListener.noteChanged(this, encryptedNote.getSnapshot());
     }
 
     EncryptedNote getEncryptedNote(){
         return encryptedNote;
+    }
+
+    public boolean getDeleted(){
+        return encryptedNote.getDeleted();
     }
     
 }

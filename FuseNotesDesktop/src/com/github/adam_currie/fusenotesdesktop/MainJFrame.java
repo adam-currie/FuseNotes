@@ -32,6 +32,8 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.security.InvalidKeyException;
 import java.sql.SQLException;
+import java.util.Iterator;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.swing.BoxLayout;
@@ -153,7 +155,7 @@ public class MainJFrame extends javax.swing.JFrame implements NoteStoreListener{
     }//GEN-LAST:event_changePassButtonActionPerformed
 
     private void addButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_addButtonActionPerformed
-        NoteJPanel notePanel = new NoteJPanel(notes.addNote(true), this);
+        NoteJPanel notePanel = new NoteJPanel(notes.createNote(true), this);
         notesListPanel.add(notePanel);
         notePanel.requestFocus();
         notesListPanel.revalidate();
@@ -169,6 +171,9 @@ public class MainJFrame extends javax.swing.JFrame implements NoteStoreListener{
      */
     public boolean changePassword(String password){
         try{
+            if(notes != null){
+                notes.shutdown();
+            }
             notes = new NoteStore(password, this);
             savePassword(password);
             notesListPanel.removeAll();
@@ -290,6 +295,10 @@ public class MainJFrame extends javax.swing.JFrame implements NoteStoreListener{
     private void initNoteStore(){
         String key = loadPassword();
         
+        if(notes != null){
+            notes.shutdown();
+        }
+        
         try{
             notes = new NoteStore(key, this);
         }catch(InvalidKeyException | NullPointerException ex){
@@ -309,16 +318,18 @@ public class MainJFrame extends javax.swing.JFrame implements NoteStoreListener{
             System.exit(-1);
         }
     }
-
+    
     @Override
-    public void noteLoaded(Note note){
+    public void notesLoaded(Iterator<Note> iterator){
         SwingUtilities.invokeLater(() -> {            
-            NoteJPanel notePanel = new NoteJPanel(note, this);
-            notesListPanel.add(notePanel);
-            notesListPanel.revalidate();
+            while(iterator.hasNext()){
+                NoteJPanel notePanel = new NoteJPanel(iterator.next(), this);
+                notesListPanel.add(notePanel);
+                notesListPanel.revalidate();
+            }
         });
     }
-
+    
     @Override
     public void noteUpdateLoaded(Note note){
         throw new UnsupportedOperationException("Not supported yet.");

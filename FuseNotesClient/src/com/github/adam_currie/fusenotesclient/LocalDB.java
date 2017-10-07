@@ -23,17 +23,14 @@
  */
 package com.github.adam_currie.fusenotesclient;
 
-import com.github.adam_currie.fusenotesshared.ECDSASigner;
+import com.github.adam_currie.fusenotesshared.ThreadSafeECDSASigner;
 import com.github.adam_currie.fusenotesshared.EncryptedNote;
 import com.github.adam_currie.fusenotesshared.NoteDatabase;
-import com.sun.istack.internal.FragmentContentHandler;
-import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 
 /**
@@ -76,7 +73,7 @@ public class LocalDB implements NoteDatabase{
     }    
     
     @Override
-    public ArrayList<EncryptedNote> getAllNotes(ECDSASigner signerOrVerfier) throws SQLException{
+    public ArrayList<EncryptedNote> getAllNotes(ThreadSafeECDSASigner signerOrVerfier) throws SQLException{
         try(Connection connection = DriverManager.getConnection(URL_STR)) {      
             PreparedStatement statement = connection.prepareStatement(
                     "SELECT * FROM note WHERE user_id=?");
@@ -121,6 +118,12 @@ public class LocalDB implements NoteDatabase{
         }
     }
 
+    /**
+     * Does not take a snapshot of the note before saving, 
+     * a snapshot of a note must be taken first and used here if the note is being used by multiple threads.
+     * @param note  the note to add to the db
+     * @throws SQLException 
+     */
     @Override
     public void addOrUpdate(EncryptedNote note) throws SQLException{
         try(Connection connection = DriverManager.getConnection(URL_STR)){

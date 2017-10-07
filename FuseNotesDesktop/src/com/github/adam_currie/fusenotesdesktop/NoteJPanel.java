@@ -25,6 +25,7 @@ package com.github.adam_currie.fusenotesdesktop;
 
 import com.github.adam_currie.fusenotesclient.*;
 import java.awt.Container;
+import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -238,7 +239,7 @@ public class NoteJPanel extends javax.swing.JPanel{
     
     private void saveButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_saveButtonActionPerformed
         note.setNoteBody(noteTextArea.getText());
-        editedLabel.setText("edited: " + dateFormat.format(note.getEditDate()));
+        editedLabel.setText("edited: " + dateFormat.format(new Timestamp(System.currentTimeMillis())));
         confirmPanel.setVisible(false);
     }//GEN-LAST:event_saveButtonActionPerformed
 

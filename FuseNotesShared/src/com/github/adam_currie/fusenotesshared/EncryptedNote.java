@@ -28,69 +28,75 @@ import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Iterator;
+import java.util.NoSuchElementException;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 
 /**
- *
+ * Encrypted note providing signing and verification, and versioning.
+ * If the note is being written to by multiple threads, 
+ * then a snapshot must be taken before the note and fragment signatures 
+ * can be used in conjunction with the data they sign.
  * @author Adam Currie
  */
 public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     private static final SecureRandom random = new SecureRandom();
     
     private byte[] noteId = new byte[12];
-    private Timestamp createDate;
-    private Timestamp metaEditDate;
-    private boolean isDeleted;
-    private byte[] signature = new byte[66];
-    private com.github.adam_currie.fusenotesshared.ECDSASigner signer;
+    private final Timestamp createDate;
+    private final ThreadSafeECDSASigner signer;
     
-    //newest fragment at index 0
-    private ArrayList<Fragment> sortedFragments = new ArrayList<Fragment>() {
-        @Override
-        public boolean add(Fragment frag){
-            super.add(frag);
-            Collections.sort(this, Collections.reverseOrder());
-            return true;
-        }
-    };
+    private ConcurrentSkipListSet<Fragment> sortedFragments = new ConcurrentSkipListSet<>();
     
     SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     
+    ReentrantLock signatureLock = new ReentrantLock();//todo: signatureLock when writing
+    
+    /*
+     * only access these fields atomically so that they don't need to be locked for reads, 
+     * signatureLock is only used for writes and snapshots to make sure the signature is synced up with the data
+     */
+        private Timestamp metaEditDate;//only set by changing reference, not value, would break thread safety
+        private AtomicBoolean isDeleted = new AtomicBoolean();
+        private byte[] signature = new byte[66];//only set by changing reference, not values, would break thread safety
+            
+    
     //todo: maybe check signature stuff in constructor, and logical checks
     //clones the byte arrays and timestamps
-    public EncryptedNote(byte[] noteId, ECDSASigner signer, Timestamp createDate, Timestamp editDate, boolean isDeleted, byte[] signature){
+    public EncryptedNote(byte[] noteId, ThreadSafeECDSASigner signer, Timestamp createDate, Timestamp editDate, boolean isDeleted, byte[] signature){
         this.noteId = noteId.clone();
         this.createDate = (Timestamp)createDate.clone();
         this.metaEditDate = (Timestamp)editDate.clone();
-        this.isDeleted = isDeleted;
+        this.isDeleted.set(isDeleted);
         this.signature = signature.clone();
         this.signer = signer;
     }
     
-    public EncryptedNote(ECDSASigner signer){
+    public EncryptedNote(ThreadSafeECDSASigner signer){
         random.nextBytes(noteId);
         createDate = new Timestamp(System.currentTimeMillis());
         metaEditDate = new Timestamp(System.currentTimeMillis());
-        isDeleted = false;
+        isDeleted.set(false);
         
         this.signer = signer;
         
-        signature = signer.sign(Arrays.toString(noteId) + createDate + metaEditDate + isDeleted);
+        sign();
     }
     
     /**
      * 
      * @param encryptedNoteBody the encrypted note body
-     * @return  a portion of the EncryptedNote with only the changed fragments
+     * @return  a partial snapshot of the EncryptedNote with only the changed fragments
      */
     public EncryptedNote setNoteBody(String encryptedNoteBody){
         Fragment frag = new Fragment(encryptedNoteBody);
         sortedFragments.add(frag);
         ArrayList<Fragment> subList = new ArrayList<>(1);
         subList.add(frag);
-        return getSubNote(subList);
+        return getPartialSnapshot(subList);
     }
 
     /**
@@ -111,8 +117,13 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     public Timestamp getEditDate(){
         Timestamp latest = metaEditDate;
         
-        if(!sortedFragments.isEmpty() && sortedFragments.get(0).getCreateDate().after(latest)){
-            latest = sortedFragments.get(0).getCreateDate();
+        Fragment last = null; 
+        try{
+            last = sortedFragments.last();
+        }catch(NoSuchElementException ex){}
+        
+        if(last != null && last.getCreateDate().after(latest)){
+            latest = last.getCreateDate();
         }
         
         return latest;
@@ -128,29 +139,52 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     public Timestamp getMetaEditDate(){
         return metaEditDate;
     }
-
+    
     public String getNoteBody(){
         if(sortedFragments.isEmpty()){
             return "";
         }else{
-            return sortedFragments.get(0).getNoteBody();
+            return sortedFragments.last().getNoteBody();
         }
     }
 
-    public ECDSASigner getSigner(){
+    public ThreadSafeECDSASigner getSigner(){
         return signer;
     }
 
-    private EncryptedNote getSubNote(ArrayList<Fragment> subList){
-        EncryptedNote subNote = new EncryptedNote(noteId, signer, createDate, metaEditDate, isDeleted, signature);
+    /**
+     * Gets a snapshot of the note's meta data such that the fields are guaranteed 
+     * to be synced up with the signature in a multi-threaded environment.
+     * @return 
+     */
+    public EncryptedNote getMetaDataSnapshot(){
+        signatureLock.lock();
+        try{
+            return new EncryptedNote(noteId, signer, createDate, metaEditDate, isDeleted.get(), signature);
+        }finally{
+            signatureLock.unlock();
+        }
+    }
+    
+    /**
+     * Gets a snapshot of the note and its fragments such that the fields are guaranteed 
+     * to be synced up with the signature(s) in a multi-threaded environment.
+     * @return 
+     */
+    public EncryptedNote getSnapshot(){
+        return getPartialSnapshot(sortedFragments);
+    }
+    
+    private EncryptedNote getPartialSnapshot(Iterable<Fragment> fragments){
+        EncryptedNote subNote = getMetaDataSnapshot();
         
-        for(Fragment frag : subList){
-            Fragment copy = subNote.new Fragment(frag.fragmentId, frag.fragCreateDate, frag.fragEditDate, frag.noteBody, frag.fragIsDeleted, frag.fragSignature);
-            subNote.sortedFragments.add(copy);
+        for(Fragment frag : fragments){
+            subNote.sortedFragments.add(frag.getSnapshot(subNote));
         }
         
         return subNote;
     }
+    
 
     /**
      * Gets the note id.
@@ -166,7 +200,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     }
 
     public boolean getDeleted(){
-        return isDeleted;
+        return isDeleted.get();
     }
     
     /**
@@ -187,24 +221,53 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
         Fragment frag = new Fragment(id, create, edit, body, deleted, sig);
         sortedFragments.add(frag);
     }
+
+    /**
+     * sets the deleted status to true on this and all fragments, updates the edit date and the signature
+     */
+    public void delete(){
+        signatureLock.lock();
+        try{
+            isDeleted.set(true);
+            metaEditDate = new Timestamp(System.currentTimeMillis());
+            sign();
+        }finally{
+            signatureLock.unlock();
+        }
+        
+        for(Fragment frag : sortedFragments){
+            frag.delete();
+        }
+    }
+
+    private void sign(){
+        signature = signer.sign("" + noteId + createDate + metaEditDate + isDeleted);
+    }
     
     
     public class Fragment implements Comparable<Fragment>{        
         private byte[] fragmentId = new byte[6];
-        private Timestamp fragCreateDate;
-        private Timestamp fragEditDate;
-        private boolean fragIsDeleted;
-        private String noteBody;
-        private byte[] fragSignature = new byte[66];
+        private final Timestamp fragCreateDate;
+        private ReentrantLock signatureLock = new ReentrantLock();
         
+        /*
+         * only access these fields atomically so that they don't need to be locked for reads, 
+         * signatureLock is only used for writes and snapshots to make sure the signature is synced up with the data
+         */
+            private Timestamp fragEditDate;//only set by changing reference, not value, would break thread safety
+            private AtomicBoolean fragIsDeleted = new AtomicBoolean();
+            private String noteBody;
+            private byte[] fragSignature = new byte[66];//only set by changing reference, not values, would break thread safety
+        
+            
         private Fragment(String encryptedNoteBody){
             random.nextBytes(fragmentId);
             fragCreateDate = new Timestamp(System.currentTimeMillis());
             fragEditDate = new Timestamp(System.currentTimeMillis());
-            fragIsDeleted = false;
-            noteBody = encryptedNoteBody;
+            fragIsDeleted.set(false);
             
-            fragSignature = signer.sign(noteBody + Arrays.toString(noteId) + Arrays.toString(fragmentId) + fragCreateDate + fragEditDate + fragIsDeleted);
+            noteBody = encryptedNoteBody;
+            sign();
         }
 
         /**
@@ -216,8 +279,17 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
             fragCreateDate = (Timestamp)create.clone();
             fragEditDate = (Timestamp)edit.clone();
             noteBody = body;
-            fragIsDeleted = deleted;
+            fragIsDeleted.set(deleted);
             fragSignature = sig.clone();
+        }
+        
+        /**
+         * Gets the id of this fragment.
+         * Must be cloned to avoid changing underlying data.
+         * @return  the fragment id 
+         */
+        public byte[] getFragmentId(){
+            return fragmentId;
         }
 
         /**
@@ -240,21 +312,25 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
             }
         }
         
+        private Fragment getSnapshot(EncryptedNote outer){
+            signatureLock.lock();
+            try{
+                return outer.new Fragment(fragmentId, fragCreateDate, fragEditDate, noteBody, fragIsDeleted.get(), fragSignature);
+            }finally{
+                signatureLock.unlock();
+            }
+        }
+        
+        private void sign(){
+            fragSignature = signer.sign(noteBody + Arrays.toString(noteId) + Arrays.toString(fragmentId) + fragCreateDate + fragEditDate + fragIsDeleted);
+        }
+        
         /**
          * Gets the encrypted note text;
          * @return the encrypted note text
          */
         public String getNoteBody(){
             return noteBody;
-        }
-
-        /**
-         * Gets the id of this fragment.
-         * Must be cloned to avoid changing underlying data.
-         * @return  the fragment id 
-         */
-        public byte[] getFragmentId(){
-            return fragmentId;
         }
 
         /**
@@ -271,7 +347,22 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
          * @return whether the fragment is deleted
          */
         public boolean getDeleted(){
-            return fragIsDeleted;
+            return fragIsDeleted.get();
+        }
+        
+        /**
+         * sets the deleted status to true, removes the notebody, updates the edit date and the signature
+         */
+        public void delete(){
+            signatureLock.lock();
+            try{
+                fragIsDeleted.set(true);
+                noteBody = null;
+                fragEditDate = new Timestamp(System.currentTimeMillis());
+                sign();
+            }finally{
+                signatureLock.unlock();
+            }
         }
         
         /**

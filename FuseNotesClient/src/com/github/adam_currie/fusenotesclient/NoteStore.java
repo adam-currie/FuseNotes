@@ -23,26 +23,33 @@
  */
 package com.github.adam_currie.fusenotesclient;
 
-import com.github.adam_currie.fusenotesshared.ECDSASigner;
+import com.github.adam_currie.fusenotesshared.ThreadSafeECDSASigner;
 import com.github.adam_currie.fusenotesshared.ECDSAUtil;
 import com.github.adam_currie.fusenotesshared.EncryptedNote;
 import com.github.adam_currie.fusenotesshared.NoteDatabase;
+import java.io.Closeable;
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.InvalidKeyException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import jdk.nashorn.internal.runtime.JSType;
 
 /**
  *
  * @author Adam Currie
  */
-public class NoteStore implements NoteListener{
-    
-    static {
+public class NoteStore implements NoteListener, Closeable{
+
+    static{
         try{
             Class.forName("org.sqlite.JDBC");
         }catch(ClassNotFoundException ex){
@@ -50,34 +57,44 @@ public class NoteStore implements NoteListener{
             System.exit(-1);
         }
     }
-    
+
     private NoteStoreListener storeListener;
     private final String URL_STR = "http://localhost:8080/FuseNotesServer/NotesServlet";//todo
     private URL url;
     private NoteDatabase db;
-    private ArrayList<Note> notes = new ArrayList<>();//todo: maybe expose as unmodifiableList;
+    private CopyOnWriteArrayList<Note> notes = new CopyOnWriteArrayList<>();//todo: maybe expose as unmodifiableList;
     private final AESEncryption aes;
-    private final ECDSASigner signer;
-    
-    public NoteStore(String privateKeyStr, NoteStoreListener storeListener) throws SQLException, InvalidKeyException{               
+    private final ThreadSafeECDSASigner signer;
+    private ScheduledExecutorService ses = Executors.newScheduledThreadPool(4);//todo: test performance of different poolsizes
+
+    public NoteStore(String privateKeyStr, NoteStoreListener storeListener) throws SQLException, InvalidKeyException{
         aes = new AESEncryption(privateKeyStr);
-        signer = new ECDSASigner(ECDSAUtil.toPrivateKeyParams(privateKeyStr));
-        
+        signer = new ThreadSafeECDSASigner(ECDSAUtil.toPrivateKeyParams(privateKeyStr));
+
         this.storeListener = storeListener;
-        
+
         try{
             url = new URL(URL_STR);
         }catch(MalformedURLException ex){
             Logger.getLogger(NoteStore.class.getName()).log(Level.SEVERE, null, ex);
             System.exit(-1);
         }
-        
+
+        //LOAD NOTES
+        //todo: maybe put all this in another thread
         db = new LocalDB();
+        
+        ArrayList<Note> tempNotes = new ArrayList<>();
         for(EncryptedNote encryptedNote : db.getAllNotes(signer)){
             Note note = new Note(encryptedNote, aes, this);
-            notes.add(note);
-            storeListener.noteLoaded(note);
+            tempNotes.add(note);
         }
+        
+        //added in bulk because we are using copy on write list
+        notes.addAll(tempNotes);
+        storeListener.notesLoaded(new SkipDeletedNotesIterator(notes.iterator()));
+        
+        ses.scheduleWithFixedDelay(new SyncWithServerTask(), 0, 5, TimeUnit.SECONDS);
     }
     
     /*
@@ -89,61 +106,42 @@ public class NoteStore implements NoteListener{
     public static String generateKey(){
         return ECDSAUtil.generatePrivateKeyStr();
     }
-    
-    
+
     /*
-     * Method               checkKeyValid
-     * Description          checks the validity of a key
-     * Params           
-     *  String key          private key in base 64
-     * Returns          
-     *  Boolean             whether the key is a valid ecdsa key
+     * Method checkKeyValid Description checks the validity of a key Params
+     * String key private key in base 64 Returns Boolean whether the key is a
+     * valid ecdsa key
      */
     public static boolean checkKeyValid(String keyStr){
         return ECDSAUtil.checkKeyValid(keyStr);
     }
 
-    //debug: test main
-    public static void main(String args[]) throws SQLException, InvalidKeyException{
-        NoteStoreListener nl = new NoteStoreListener() {
-            @Override
-            public void noteLoaded(Note note){
-                //todo
-            }
-
-            @Override
-            public void noteUpdateLoaded(Note note){
-                //todo
-            }
-        };
-        NoteStore ns = new NoteStore(generateKey(), nl);
-    }
-
     /**
-     * Method               addNote
-     * Description          adds a new note
-     * @param waitForEdit   whether or not to wait for an edit before saving this note
+     * Method createNote Description adds a new note
+     *
+     * @param waitForEdit whether or not to wait for an edit before saving this
+     * note
+     * @return the new note
      */
-    public Note addNote(boolean waitForEdit){
+    public Note createNote(boolean waitForEdit){
         Note note = new Note(signer, aes, this);
-        notes.add(note);
         
-        if(!waitForEdit){
-            try{
-                db.addOrUpdate(note.getEncryptedNote());
-            }catch(SQLException ex){
-                Logger.getLogger(NoteStore.class.getName()).log(Level.SEVERE, null, ex);
-                //todo retry
-            }
+        ses.execute(() -> {
+            notes.add(note);
             
-            //todo: send to server and stuff
-        }
-        
+            if(!waitForEdit){
+                try{
+                    db.addOrUpdate(note.getEncryptedNote());
+                }catch(SQLException ex){
+                    Logger.getLogger(NoteStore.class.getName()).log(Level.SEVERE, null, ex);
+                    //todo retry
+                }
+                
+                //todo: send to server and stuff
+            }
+        });
+
         return note;
-    }
-    
-    public Note addNote(String noteBody){
-        throw new UnsupportedOperationException("Not supported yet.");
     }
 
     public String getPrivateKey(){
@@ -157,6 +155,71 @@ public class NoteStore implements NoteListener{
         }catch(SQLException ex){
             Logger.getLogger(NoteStore.class.getName()).log(Level.SEVERE, null, ex);
             //todo retry
+        }
+    }
+
+    /**
+     * Shuts down the instance and waits for all threads to stop.
+     * @throws IOException 
+     */
+    @Override
+    public void close() throws IOException{
+        shutdown();
+        try{
+            ses.awaitTermination(10, TimeUnit.SECONDS);
+        }catch(InterruptedException ex){
+            Logger.getLogger(NoteStore.class.getName()).log(Level.SEVERE, null, ex);
+            //todo
+        }
+    }
+
+    /**
+     * Shuts down the instance without blocking.
+     */
+    public void shutdown(){
+        ses.shutdown();
+    }
+
+    private static class SkipDeletedNotesIterator implements Iterator<Note>{
+        private Iterator<Note> iterator;
+        private Note next = null;
+        
+        public SkipDeletedNotesIterator(Iterator<Note> iterator){
+            this.iterator = iterator;
+            advanceNext();
+        }
+
+        @Override
+        public boolean hasNext(){
+            return next != null;
+        }
+
+        @Override
+        public Note next(){
+            if(next == null){
+                throw new NoSuchElementException();
+            }
+            
+            Note temp = next;
+            advanceNext();
+            return temp;
+        }
+
+        private void advanceNext(){
+            do{
+                if(iterator.hasNext()){
+                    next = iterator.next();
+                }else{
+                    next = null;
+                }
+            }while(next != null && next.getDeleted());//skip deleted ones
+        }
+    }
+
+    private class SyncWithServerTask implements Runnable{
+        @Override
+        public void run(){
+            //todo
         }
     }
 

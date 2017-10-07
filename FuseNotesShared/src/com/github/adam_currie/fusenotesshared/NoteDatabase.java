@@ -33,7 +33,7 @@ import java.util.ArrayList;
 public interface NoteDatabase{
     
     //attaches signerOrVerifier to the loaded notes, also used to specify the userId/public key associated with the notes 
-    public ArrayList<EncryptedNote> getAllNotes(ECDSASigner signerOrVerifier) throws SQLException;//todo, version of this in ServerDatabase that takes date
+    public ArrayList<EncryptedNote> getAllNotes(ThreadSafeECDSASigner signerOrVerifier) throws SQLException;//todo, version of this in ServerDatabase that takes date
     
     public void addOrUpdate(EncryptedNote note) throws SQLException;
 }

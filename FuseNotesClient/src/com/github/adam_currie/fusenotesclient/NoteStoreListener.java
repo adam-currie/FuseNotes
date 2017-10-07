@@ -23,11 +23,18 @@
  */
 package com.github.adam_currie.fusenotesclient;
 
+import java.util.Iterator;
+
 /**
  *
  * @author Adam Currie
  */
 public interface NoteStoreListener{
-    public void noteLoaded(Note note);
-    public void noteUpdateLoaded(Note note);
+    /**
+     * Called when notes are loaded(not when one is created using {@link #NoteStore.createNote(boolean) createNote}).
+     * Called from secondary threads.
+     * @param iterator to iterate over the notes
+     */
+    public void notesLoaded(Iterator<Note> iterator);
+    public void noteUpdateLoaded(Note note);    
 }

@@ -5,6 +5,7 @@
         <group>
             <file>file:/C:/Users/Adam/Documents/NetBeansProjects/FuseNotes/FuseNotes/FuseNotesClient/src/com/github/adam_currie/fusenotesclient/Note.java</file>
             <file>file:/C:/Users/Adam/Documents/NetBeansProjects/FuseNotes/FuseNotes/FuseNotesClient/src/com/github/adam_currie/fusenotesclient/LocalDB.java</file>
+            <file>file:/C:/Users/Adam/Documents/NetBeansProjects/FuseNotes/FuseNotes/FuseNotesClient/src/com/github/adam_currie/fusenotesclient/NoteListener.java</file>
             <file>file:/C:/Users/Adam/Documents/NetBeansProjects/FuseNotes/FuseNotes/FuseNotesClient/src/com/github/adam_currie/fusenotesclient/NoteStore.java</file>
         </group>
     </open-files>
