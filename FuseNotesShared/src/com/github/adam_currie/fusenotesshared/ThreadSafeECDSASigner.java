@@ -23,9 +23,7 @@
  */
 package com.github.adam_currie.fusenotesshared;
 
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.crypto.signers.ECDSASigner;
@@ -54,7 +52,7 @@ public class ThreadSafeECDSASigner{
         return privateKey != null;
     }
 
-    byte[] sign(String message){
+    ECDSASignature sign(String message){
         if(!canSign()){
             throw new IllegalStateException("not initialized for signing");
         }
@@ -64,42 +62,18 @@ public class ThreadSafeECDSASigner{
         ECDSASigner signer = new org.bouncycastle.crypto.signers.ECDSASigner();
         signer.init(true, privateKey);
         
-        BigInteger[] rs = signer.generateSignature(msgBytes);
+        return new ECDSASignature(signer.generateSignature(msgBytes));
 
-        byte[] signature = new byte[66];
         
-        byte[] r = rs[0].toByteArray();
-        byte[] s = rs[1].toByteArray();
-        
-        //in the binary representation of a negative BigInteger leading 1's are inconsequential, and for positive values leading zeros are inconsequential
-        
-        //copy with leading zeros
-        System.arraycopy(r, 0, signature, 33-r.length, r.length);
-        //if the integer is negative, pad with leading 1's (-1 as a byte is 1111111 in binary)
-        if(r[0] < 0){
-            java.util.Arrays.fill(signature, 0, 33-r.length, (byte)-1);
-        }
-        
-        //copy with leading zeros
-        System.arraycopy(s, 0, signature, 66-s.length, s.length);
-        //if the integer is negative, pad with leading 1's (-1 as a byte is 1111111 in binary)
-        if(s[0] < 0){
-            java.util.Arrays.fill(signature, 33, 66-s.length, (byte)-1);
-        }
-        
-        return signature;//debug
     }
     
-    public boolean checkSignature(String message, byte[] signature){
+    public boolean checkSignature(String message, ECDSASignature signature){
         byte[] msgBytes = message.getBytes(StandardCharsets.UTF_8);
-        
-        byte[] r = Arrays.copyOfRange(signature, 0, 33);
-        byte[] s = Arrays.copyOfRange(signature, 33, 66);
         
         ECDSASigner verifier = new ECDSASigner();
         verifier.init(false, publicKey);
         
-        return verifier.verifySignature(msgBytes, new BigInteger(r), new BigInteger(s));
+        return verifier.verifySignature(msgBytes, signature.r(), signature.s());
     }
 
     public ECPrivateKeyParameters getPrivateKey(){

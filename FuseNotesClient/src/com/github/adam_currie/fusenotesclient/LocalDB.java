@@ -23,6 +23,7 @@
  */
 package com.github.adam_currie.fusenotesclient;
 
+import com.github.adam_currie.fusenotesshared.ECDSASignature;
 import com.github.adam_currie.fusenotesshared.ThreadSafeECDSASigner;
 import com.github.adam_currie.fusenotesshared.EncryptedNote;
 import com.github.adam_currie.fusenotesshared.NoteDatabase;
@@ -32,6 +33,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 
 /**
  *
@@ -94,8 +96,10 @@ public class LocalDB implements NoteDatabase{
                     noteResults.getTimestamp("creation"),
                     noteResults.getTimestamp("meta_edit"),
                     noteResults.getBoolean("deleted"),
-                    noteResults.getBytes("signature")
+                    ECDSASignature.fromBytes(noteResults.getBytes("signature"))
                 );
+                
+                System.out.println(Arrays.toString(note.getSignature().toBytes()));//debug
                 
                 //GET NOTE FRAGMENTS
                 statement.setBytes(1, note.getNoteId());
@@ -107,7 +111,7 @@ public class LocalDB implements NoteDatabase{
                         fragResults.getTimestamp("edit"),
                         fragResults.getString("note_body"),
                         fragResults.getBoolean("deleted"),
-                        fragResults.getBytes("signature")
+                        ECDSASignature.fromBytes(fragResults.getBytes("signature"))
                     );
                 }
                 
@@ -138,7 +142,9 @@ public class LocalDB implements NoteDatabase{
             statement.setTimestamp(3, note.getCreateDate());
             statement.setTimestamp(4, note.getMetaEditDate());
             statement.setBoolean(5, note.getDeleted());
-            statement.setBytes(6, note.getSignature());
+            statement.setBytes(6, note.getSignature().toBytes());
+            
+            System.out.println(Arrays.toString(note.getSignature().toBytes()));//debug
             
             statement.execute();  
             
@@ -153,7 +159,7 @@ public class LocalDB implements NoteDatabase{
                 statement.setTimestamp(4, frag.getEditDate());
                 statement.setBoolean(5, frag.getDeleted());
                 statement.setString(6, frag.getNoteBody());
-                statement.setBytes(7, frag.getSignature());
+                statement.setBytes(7, frag.getSignature().toBytes());
                 
                 statement.addBatch();
             }

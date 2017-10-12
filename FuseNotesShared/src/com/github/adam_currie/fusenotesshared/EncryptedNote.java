@@ -61,17 +61,17 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
      */
         private Timestamp metaEditDate;//only set by changing reference, not value, would break thread safety
         private AtomicBoolean isDeleted = new AtomicBoolean();
-        private byte[] signature = new byte[66];//only set by changing reference, not values, would break thread safety
+        private ECDSASignature signature;
             
     
     //todo: maybe check signature stuff in constructor, and logical checks
     //clones the byte arrays and timestamps
-    public EncryptedNote(byte[] noteId, ThreadSafeECDSASigner signer, Timestamp createDate, Timestamp editDate, boolean isDeleted, byte[] signature){
+    public EncryptedNote(byte[] noteId, ThreadSafeECDSASigner signer, Timestamp createDate, Timestamp editDate, boolean isDeleted, ECDSASignature signature){
         this.noteId = noteId.clone();
         this.createDate = (Timestamp)createDate.clone();
         this.metaEditDate = (Timestamp)editDate.clone();
         this.isDeleted.set(isDeleted);
-        this.signature = signature.clone();
+        this.signature = signature;
         this.signer = signer;
     }
     
@@ -203,12 +203,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
         return isDeleted.get();
     }
     
-    /**
-     * Gets the notes signature.
-     * Must be cloned to avoid changing underlying array.
-     * @return the signature
-     */
-    public byte[] getSignature(){
+    public ECDSASignature getSignature(){
         return signature;
     }
 
@@ -217,7 +212,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
         return sortedFragments.iterator();
     }
 
-    public void addFragment(byte[] id, Timestamp create, Timestamp edit, String body, boolean deleted, byte[] sig){
+    public void addFragment(byte[] id, Timestamp create, Timestamp edit, String body, boolean deleted, ECDSASignature sig){
         Fragment frag = new Fragment(id, create, edit, body, deleted, sig);
         sortedFragments.add(frag);
     }
@@ -257,7 +252,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
             private Timestamp fragEditDate;//only set by changing reference, not value, would break thread safety
             private AtomicBoolean fragIsDeleted = new AtomicBoolean();
             private String noteBody;
-            private byte[] fragSignature = new byte[66];//only set by changing reference, not values, would break thread safety
+            private ECDSASignature fragSignature;
         
             
         private Fragment(String encryptedNoteBody){
@@ -274,13 +269,13 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
          * Creates a note fragment associated with this note.
          * Clones the byte arrays and timestamps.
          */
-        private Fragment(byte[] id, Timestamp create, Timestamp edit, String body, boolean deleted, byte[] sig){
+        private Fragment(byte[] id, Timestamp create, Timestamp edit, String body, boolean deleted, ECDSASignature sig){
             fragmentId = id.clone();
             fragCreateDate = (Timestamp)create.clone();
             fragEditDate = (Timestamp)edit.clone();
             noteBody = body;
             fragIsDeleted.set(deleted);
-            fragSignature = sig.clone();
+            fragSignature = sig;
         }
         
         /**
@@ -365,12 +360,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
             }
         }
         
-        /**
-         * Gets the signature of this fragment.
-         * Must be cloned to avoid changing underlying data.
-         * @return  the signature
-         */
-        public byte[] getSignature(){
+        public ECDSASignature getSignature(){
             return fragSignature;
         }
     }
