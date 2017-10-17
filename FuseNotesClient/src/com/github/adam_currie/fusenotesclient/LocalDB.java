@@ -26,7 +26,9 @@ package com.github.adam_currie.fusenotesclient;
 import com.github.adam_currie.fusenotesshared.ECDSASignature;
 import com.github.adam_currie.fusenotesshared.ThreadSafeECDSASigner;
 import com.github.adam_currie.fusenotesshared.EncryptedNote;
+import com.github.adam_currie.fusenotesshared.FragmentID;
 import com.github.adam_currie.fusenotesshared.NoteDatabase;
+import com.github.adam_currie.fusenotesshared.NoteID;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -91,7 +93,7 @@ public class LocalDB implements NoteDatabase{
                 
                 //GET NOTE META DATA
                 EncryptedNote note = new EncryptedNote(
-                    noteResults.getBytes("note_id"),
+                    NoteID.fromBytes(noteResults.getBytes("note_id")),
                     signerOrVerfier,
                     noteResults.getTimestamp("creation"),
                     noteResults.getTimestamp("meta_edit"),
@@ -102,11 +104,11 @@ public class LocalDB implements NoteDatabase{
                 System.out.println(Arrays.toString(note.getSignature().toBytes()));//debug
                 
                 //GET NOTE FRAGMENTS
-                statement.setBytes(1, note.getNoteId());
+                statement.setBytes(1, note.getNoteId().toBytes());
                 ResultSet fragResults = statement.executeQuery();
                 while(fragResults.next()){
                     note.addFragment(
-                        fragResults.getBytes("fragment_id"),
+                        FragmentID.fromBytes(fragResults.getBytes("fragment_id")),
                         fragResults.getTimestamp("creation"),
                         fragResults.getTimestamp("edit"),
                         fragResults.getString("note_body"),
@@ -130,6 +132,8 @@ public class LocalDB implements NoteDatabase{
      */
     @Override
     public void addOrUpdate(EncryptedNote note) throws SQLException{
+        byte[] noteIDBytes = note.getNoteId().toBytes();
+        
         try(Connection connection = DriverManager.getConnection(URL_STR)){
             connection.setAutoCommit(false);
             
@@ -137,7 +141,7 @@ public class LocalDB implements NoteDatabase{
             PreparedStatement statement = connection.prepareStatement(
                     "REPLACE INTO note (note_id,user_id,creation,meta_edit,deleted,signature) VALUES (?, ?, ?, ?, ?, ?) ");
 
-            statement.setBytes(1, note.getNoteId());
+            statement.setBytes(1, noteIDBytes);
             statement.setBytes(2, note.getUserID());
             statement.setTimestamp(3, note.getCreateDate());
             statement.setTimestamp(4, note.getMetaEditDate());
@@ -153,8 +157,8 @@ public class LocalDB implements NoteDatabase{
                     "REPLACE INTO note_fragment (note_id,fragment_id,creation,edit,deleted,note_body,signature) VALUES (?, ?, ?, ?, ?, ?, ?) ");
             
             for(EncryptedNote.Fragment frag : note){
-                statement.setBytes(1, note.getNoteId());
-                statement.setBytes(2, frag.getFragmentId());
+                statement.setBytes(1, noteIDBytes);
+                statement.setBytes(2, frag.getFragmentId().toBytes());
                 statement.setTimestamp(3, frag.getCreateDate());
                 statement.setTimestamp(4, frag.getEditDate());
                 statement.setBoolean(5, frag.getDeleted());

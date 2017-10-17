@@ -45,7 +45,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     private static final SecureRandom random = new SecureRandom();
     
-    private byte[] noteId = new byte[12];
+    private final NoteID noteID;
     private final Timestamp createDate;
     private final ThreadSafeECDSASigner signer;
     
@@ -66,8 +66,8 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     
     //todo: maybe check signature stuff in constructor, and logical checks
     //clones the byte arrays and timestamps
-    public EncryptedNote(byte[] noteId, ThreadSafeECDSASigner signer, Timestamp createDate, Timestamp editDate, boolean isDeleted, ECDSASignature signature){
-        this.noteId = noteId.clone();
+    public EncryptedNote(NoteID noteID, ThreadSafeECDSASigner signer, Timestamp createDate, Timestamp editDate, boolean isDeleted, ECDSASignature signature){
+        this.noteID = noteID;
         this.createDate = (Timestamp)createDate.clone();
         this.metaEditDate = (Timestamp)editDate.clone();
         this.isDeleted.set(isDeleted);
@@ -76,7 +76,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     }
     
     public EncryptedNote(ThreadSafeECDSASigner signer){
-        random.nextBytes(noteId);
+        noteID = new NoteID();
         createDate = new Timestamp(System.currentTimeMillis());
         metaEditDate = new Timestamp(System.currentTimeMillis());
         isDeleted.set(false);
@@ -160,7 +160,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     public EncryptedNote getMetaDataSnapshot(){
         signatureLock.lock();
         try{
-            return new EncryptedNote(noteId, signer, createDate, metaEditDate, isDeleted.get(), signature);
+            return new EncryptedNote(noteID, signer, createDate, metaEditDate, isDeleted.get(), signature);
         }finally{
             signatureLock.unlock();
         }
@@ -183,16 +183,10 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
         }
         
         return subNote;
-    }
-    
+    }    
 
-    /**
-     * Gets the note id.
-     * Must be cloned to avoid changing underlying array.
-     * @return the note id
-     */
-    public byte[] getNoteId(){
-        return noteId;
+    public NoteID getNoteId(){
+        return noteID;
     }
 
     public byte[] getUserID(){
@@ -212,7 +206,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
         return sortedFragments.iterator();
     }
 
-    public void addFragment(byte[] id, Timestamp create, Timestamp edit, String body, boolean deleted, ECDSASignature sig){
+    public void addFragment(FragmentID id, Timestamp create, Timestamp edit, String body, boolean deleted, ECDSASignature sig){
         Fragment frag = new Fragment(id, create, edit, body, deleted, sig);
         sortedFragments.add(frag);
     }
@@ -236,12 +230,11 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     }
 
     private void sign(){
-        signature = signer.sign("" + noteId + createDate + metaEditDate + isDeleted);
-    }
-    
+        signature = signer.sign("" + noteID + createDate + metaEditDate + isDeleted);
+    }    
     
     public class Fragment implements Comparable<Fragment>{        
-        private byte[] fragmentId = new byte[6];
+        private final FragmentID fragmentID;
         private final Timestamp fragCreateDate;
         private ReentrantLock signatureLock = new ReentrantLock();
         
@@ -256,7 +249,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
         
             
         private Fragment(String encryptedNoteBody){
-            random.nextBytes(fragmentId);
+            fragmentID = new FragmentID();
             fragCreateDate = new Timestamp(System.currentTimeMillis());
             fragEditDate = new Timestamp(System.currentTimeMillis());
             fragIsDeleted.set(false);
@@ -269,22 +262,17 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
          * Creates a note fragment associated with this note.
          * Clones the byte arrays and timestamps.
          */
-        private Fragment(byte[] id, Timestamp create, Timestamp edit, String body, boolean deleted, ECDSASignature sig){
-            fragmentId = id.clone();
+        private Fragment(FragmentID fragmentID, Timestamp create, Timestamp edit, String body, boolean deleted, ECDSASignature sig){
+            this.fragmentID = fragmentID;
             fragCreateDate = (Timestamp)create.clone();
             fragEditDate = (Timestamp)edit.clone();
             noteBody = body;
             fragIsDeleted.set(deleted);
             fragSignature = sig;
         }
-        
-        /**
-         * Gets the id of this fragment.
-         * Must be cloned to avoid changing underlying data.
-         * @return  the fragment id 
-         */
-        public byte[] getFragmentId(){
-            return fragmentId;
+
+        public FragmentID getFragmentId(){
+            return fragmentID;
         }
 
         /**
@@ -310,14 +298,15 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
         private Fragment getSnapshot(EncryptedNote outer){
             signatureLock.lock();
             try{
-                return outer.new Fragment(fragmentId, fragCreateDate, fragEditDate, noteBody, fragIsDeleted.get(), fragSignature);
+                return outer.new Fragment(fragmentID, fragCreateDate, fragEditDate, noteBody, fragIsDeleted.get(), fragSignature);
             }finally{
                 signatureLock.unlock();
             }
         }
         
+        //todo: check that the tostring method for these accurately represents them, same for the frag version
         private void sign(){
-            fragSignature = signer.sign(noteBody + Arrays.toString(noteId) + Arrays.toString(fragmentId) + fragCreateDate + fragEditDate + fragIsDeleted);
+            fragSignature = signer.sign(noteBody + noteID + fragmentID + fragCreateDate + fragEditDate + fragIsDeleted);
         }
         
         /**
