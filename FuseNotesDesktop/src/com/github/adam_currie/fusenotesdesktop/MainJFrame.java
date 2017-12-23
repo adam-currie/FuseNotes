@@ -48,7 +48,9 @@ import javax.swing.SwingUtilities;
 public class MainJFrame extends javax.swing.JFrame implements NoteStoreListener{
     
     //todo: encrypt with hardware info as the key
-    private final String KEY_PATH = "key.sav";
+    private static final String KEY_PATH = "key.sav";
+    private static final int SYN_INTERVAL_SECONDS = 10;//todo: change to like 5 minutes
+    
     private NoteStore notes = null;
 
     public NoteStore getNoteStore(){
@@ -174,7 +176,7 @@ public class MainJFrame extends javax.swing.JFrame implements NoteStoreListener{
             if(notes != null){
                 notes.shutdown();
             }
-            notes = new NoteStore(password, this);
+            notes = new NoteStore(password, SYN_INTERVAL_SECONDS, this);
             savePassword(password);
             notesListPanel.removeAll();
             notesListPanel.revalidate();
@@ -300,7 +302,7 @@ public class MainJFrame extends javax.swing.JFrame implements NoteStoreListener{
         }
         
         try{
-            notes = new NoteStore(key, this);
+            notes = new NoteStore(key, SYN_INTERVAL_SECONDS, this);
         }catch(InvalidKeyException | NullPointerException ex){
             while(true){
                 showKeyChangeDlg();

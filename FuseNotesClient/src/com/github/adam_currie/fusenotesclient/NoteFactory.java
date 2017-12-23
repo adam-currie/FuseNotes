@@ -21,25 +21,45 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.github.adam_currie.fusenotesshared;
+package com.github.adam_currie.fusenotesclient;
 
-import java.util.ArrayList;
+import com.github.adam_currie.fusenotesshared.ECDSASignature;
+import com.github.adam_currie.fusenotesshared.ECDSASignerVerifier;
+import com.github.adam_currie.fusenotesshared.EncryptedNote;
+import com.github.adam_currie.fusenotesshared.NoteID;
+import java.sql.Timestamp;
 
 /**
  *
  * @author Adam Currie
  */
-public class NoteIDTree{
-    private static NoteID noteID;
-    private ArrayList<FragmentID> fragIDs;
+class NoteFactory{
+    private final ECDSASignerVerifier signer;
+    private final AESEncryption aes;
     
-    public NoteIDTree(EncryptedNote note){
-        noteID = note.getNoteId();
-        
-        fragIDs = new ArrayList<>();
-        
-        for(EncryptedNote.Fragment frag : note){
-            fragIDs.add(frag.getFragmentId());
-        }
+    NoteFactory(ECDSASignerVerifier signer, AESEncryption aes){
+        this.signer = signer;
+        this.aes = aes;
+    }
+    
+    Note createNote(NoteID noteID, Timestamp createDate, Timestamp editDate, boolean isDeleted, ECDSASignature signature){
+        EncryptedNote en = new EncryptedNote(noteID, signer, createDate, editDate, isDeleted, signature);
+        return new Note(en, aes);
+    }
+
+    Note createNote(){
+        return new Note(signer, aes);
+    }
+    
+    Note createNote(EncryptedNote en){
+        return new Note(en, aes);
+    }
+
+    byte[] getUserID(){
+        return signer.getPublicKeyBytes();
+    }
+    
+    ECDSASignerVerifier getSigner(){
+        return signer;
     }
 }

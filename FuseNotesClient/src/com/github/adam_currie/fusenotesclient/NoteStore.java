@@ -23,20 +23,22 @@
  */
 package com.github.adam_currie.fusenotesclient;
 
-import com.github.adam_currie.fusenotesshared.ThreadSafeECDSASigner;
+import com.github.adam_currie.fusenotesshared.ECDSASignature;
+import com.github.adam_currie.fusenotesshared.ECDSASignerVerifier;
 import com.github.adam_currie.fusenotesshared.ECDSAUtil;
 import com.github.adam_currie.fusenotesshared.EncryptedNote;
-import com.github.adam_currie.fusenotesshared.NoteDatabase;
+import com.github.adam_currie.fusenotesshared.NoteID;
+import com.github.adam_currie.fusenotesshared.Protocol;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.InvalidKeyException;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -47,7 +49,7 @@ import java.util.logging.Logger;
  *
  * @author Adam Currie
  */
-public class NoteStore implements NoteListener, Closeable{
+public class NoteStore extends NoteContainer implements Closeable, NoteListener{
 
     static{
         try{
@@ -57,19 +59,34 @@ public class NoteStore implements NoteListener, Closeable{
             System.exit(-1);
         }
     }
-
+    
+    private static final String LAST_SERVER_SYNC_PATH = "last_server_sync.sav";
     private NoteStoreListener storeListener;
     private final String URL_STR = "http://localhost:8080/FuseNotesServer/NotesServlet";//todo
     private URL url;
-    private NoteDatabase db;
-    private CopyOnWriteArrayList<Note> notes = new CopyOnWriteArrayList<>();//todo: maybe expose as unmodifiableList;
-    private final AESEncryption aes;
-    private final ThreadSafeECDSASigner signer;
     private ScheduledExecutorService ses = Executors.newScheduledThreadPool(4);//todo: test performance of different poolsizes
-
-    public NoteStore(String privateKeyStr, NoteStoreListener storeListener) throws SQLException, InvalidKeyException{
-        aes = new AESEncryption(privateKeyStr);
-        signer = new ThreadSafeECDSASigner(ECDSAUtil.toPrivateKeyParams(privateKeyStr));
+    private ConnectionToServer server;
+    
+    /**
+     * 
+     * @param privateKeyStr
+     * @param syncIntertvalSeconds      will be set to MIN_SYNC_INTERVAL_SECONDS if lower
+     * @param storeListener
+     * @throws SQLException
+     * @throws InvalidKeyException 
+     */
+    public NoteStore(String privateKeyStr, int syncIntertvalSeconds, NoteStoreListener storeListener) throws SQLException, InvalidKeyException{
+        super(  
+                new NoteFactory(
+                    new ECDSASignerVerifier(ECDSAUtil.toPrivateKeyParams(privateKeyStr)),
+                    new AESEncryption(privateKeyStr)
+                ),
+                true
+        );
+        
+        if(syncIntertvalSeconds < Protocol.MIN_SYNC_INTERVAL_SECONDS){
+            syncIntertvalSeconds = Protocol.MIN_SYNC_INTERVAL_SECONDS;
+        }
 
         this.storeListener = storeListener;
 
@@ -81,21 +98,37 @@ public class NoteStore implements NoteListener, Closeable{
         }
 
         //LOAD NOTES
-        //todo: maybe put all this in another thread
-        db = new LocalDB();
         
-        ArrayList<Note> tempNotes = new ArrayList<>();
-        for(EncryptedNote encryptedNote : db.getAllNotes(signer)){
-            Note note = new Note(encryptedNote, aes, this);
-            tempNotes.add(note);
+        ArrayList<Note> notesFromDB = LocalDB.getAllNotes(noteFactory);
+        
+        notes.addAll(notesFromDB);
+        storeListener.notesLoaded(new SkipDeletedNotesIterator(notesFromDB.iterator()));
+        
+        try{
+            server = new ConnectionToServer(URL_STR, noteFactory);
+        }catch(MalformedURLException ex){
+            Logger.getLogger(NoteStore.class.getName()).log(Level.SEVERE, null, ex);
+            System.exit(-1);
         }
         
-        //added in bulk because we are using copy on write list
-        notes.addAll(tempNotes);
-        storeListener.notesLoaded(new SkipDeletedNotesIterator(notes.iterator()));
+        //todo
+        notes.stream().map(n -> n.getEncryptedNote());//debug
+        for(Note note : notes){
+            //todo
+        }
         
-        ses.scheduleWithFixedDelay(new SyncWithServerTask(), 0, 5, TimeUnit.SECONDS);
+        server.startAutoUpdate(syncIntertvalSeconds, 0);
     }
+    
+    @Override
+    public Note addNote(){
+        //todo: update db and stuff
+        Note n = super.addNote();
+        n.setNoteListener(this);
+        return n;
+    }
+
+
     
     /*
      * Method               generateKeyPair
@@ -124,14 +157,14 @@ public class NoteStore implements NoteListener, Closeable{
      * @return the new note
      */
     public Note createNote(boolean waitForEdit){
-        Note note = new Note(signer, aes, this);
+        Note note = noteFactory.createNote();
         
         ses.execute(() -> {
             notes.add(note);
             
             if(!waitForEdit){
                 try{
-                    db.addOrUpdate(note.getEncryptedNote());
+                    LocalDB.addOrUpdate(note);
                 }catch(SQLException ex){
                     Logger.getLogger(NoteStore.class.getName()).log(Level.SEVERE, null, ex);
                     //todo retry
@@ -145,17 +178,7 @@ public class NoteStore implements NoteListener, Closeable{
     }
 
     public String getPrivateKey(){
-        return signer.getPrivateKeyString();
-    }
-
-    @Override
-    public void noteChanged(Note note, EncryptedNote subNote){
-        try{
-            db.addOrUpdate(subNote);
-        }catch(SQLException ex){
-            Logger.getLogger(NoteStore.class.getName()).log(Level.SEVERE, null, ex);
-            //todo retry
-        }
+        return noteFactory.getSigner().getPrivateKeyString();
     }
 
     /**
@@ -178,6 +201,16 @@ public class NoteStore implements NoteListener, Closeable{
      */
     public void shutdown(){
         ses.shutdown();
+    }
+
+    @Override
+    public void noteChanged(Note note, EncryptedNote subNote){
+        try{
+            LocalDB.addOrUpdate(noteFactory.createNote(subNote));//todo: maybe change this, like the createNote(EncryptedNote) method will probably need the other fields of note like the upcoming syncedwithserver flag
+        }catch(SQLException ex){
+            Logger.getLogger(NoteStore.class.getName()).log(Level.SEVERE, null, ex);
+            //todo retry
+        }
     }
 
     private static class SkipDeletedNotesIterator implements Iterator<Note>{
@@ -214,13 +247,6 @@ public class NoteStore implements NoteListener, Closeable{
                 }
             }while(next != null && next.getDeleted());//skip deleted ones
         }
-    }
-
-    private class SyncWithServerTask implements Runnable{
-        @Override
-        public void run(){
-            //todo
-        }
-    }
+    }   
 
 }

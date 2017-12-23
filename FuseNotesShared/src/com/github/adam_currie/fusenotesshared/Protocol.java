@@ -23,18 +23,10 @@
  */
 package com.github.adam_currie.fusenotesshared;
 
-import java.sql.SQLException;
-import java.util.ArrayList;
-
-/*
- * Name     NoteDatabase
- * Purpose  Data access layer for notes database.
+/**
+ *
+ * @author Adam Currie
  */
-public interface NoteDatabase{
-    
-    //attaches signerOrVerifier to the loaded notes, also used to specify the userId/public key associated with the notes 
-    public ArrayList<EncryptedNote> getAllNotes(ECDSASignerVerifier signerOrVerifier) throws SQLException;//todo, version of this in ServerDatabase that takes date
-    
-    public void addOrUpdate(EncryptedNote note) throws SQLException;
+public final class Protocol{
+    public static final int MIN_SYNC_INTERVAL_SECONDS = 10;//todo: set to like 1 minute
 }
-

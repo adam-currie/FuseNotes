@@ -3,11 +3,8 @@
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
         <group>
-            <file>file:/C:/Users/Adam/Documents/NetBeansProjects/FuseNotes/FuseNotes/FuseNotesShared/src/com/github/adam_currie/fusenotesshared/NoteIDTree.java</file>
-            <file>file:/C:/Users/Adam/Documents/NetBeansProjects/FuseNotes/FuseNotes/FuseNotesShared/src/com/github/adam_currie/fusenotesshared/FragmentID.java</file>
-            <file>file:/C:/Users/Adam/Documents/NetBeansProjects/FuseNotes/FuseNotes/FuseNotesShared/src/com/github/adam_currie/fusenotesshared/ID.java</file>
-            <file>file:/C:/Users/Adam/Documents/NetBeansProjects/FuseNotes/FuseNotes/FuseNotesShared/src/com/github/adam_currie/fusenotesshared/NoteID.java</file>
-            <file>file:/C:/Users/Adam/Documents/NetBeansProjects/FuseNotes/FuseNotes/FuseNotesShared/src/com/github/adam_currie/fusenotesshared/ECDSASignature.java</file>
+            <file>file:/C:/Users/Adam/Documents/NetBeansProjects/FuseNotes/FuseNotes/FuseNotesShared/src/com/github/adam_currie/fusenotesshared/ECDSASignerVerifier.java</file>
+            <file>file:/C:/Users/Adam/Documents/NetBeansProjects/FuseNotes/FuseNotes/FuseNotesShared/src/com/github/adam_currie/fusenotesshared/EncryptedNote.java</file>
         </group>
     </open-files>
 </project-private>

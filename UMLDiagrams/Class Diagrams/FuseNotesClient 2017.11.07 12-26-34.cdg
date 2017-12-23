@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<ClassDiagram name="FuseNotesClient">
+  <ClassDiagramComponents>
+    <Class name="AESEncryption" package="com.github.adam_currie.fusenotesclient" visibility="public" xPosition="133.0" yPosition="963.0">
+      <Fields>
+        <Field name="charset" type="Charset" visibility="private" isFinal="true"/>
+        <Field name="rand" type="SecureRandom" visibility="private" isFinal="true"/>
+        <Field name="keyBytes" type="byte[]" visibility="private" isFinal="true"/>
+        <Field name="privateKeyStr" type="String" visibility="private" isFinal="true"/>
+        <Field name="encryptCipher" type="ThreadLocal&lt;PaddedBufferedBlockCipher&gt;" visibility="private" isStatic="true" isFinal="true"/>
+        <Field name="decryptCipher" type="ThreadLocal&lt;PaddedBufferedBlockCipher&gt;" visibility="private" isStatic="true" isFinal="true"/>
+      </Fields>
+      <Constructors>
+        <Constructor visibility="package">
+          <Argument type="String" name="keyStr"/>
+        </Constructor>
+      </Constructors>
+      <Methods>
+        <Method name="main" returnType="void" visibility="public" isStatic="true">
+          <Argument type="String[]" name="args"/>
+        </Method>
+        <Method name="getPrivateKeyStr" returnType="String" visibility="package"/>
+        <Method name="encrypt" returnType="String" visibility="package">
+          <Argument type="String" name="payload"/>
+        </Method>
+        <Method name="decrypt" returnType="String" visibility="package">
+          <Argument type="String" name="cipherText"/>
+        </Method>
+      </Methods>
+    </Class>
+    <Class name="LocalDB" package="com.github.adam_currie.fusenotesclient" visibility="public" xPosition="1663.0" yPosition="973.0">
+      <Fields>
+        <Field name="URL_STR" type="String" visibility="private" isFinal="true"/>
+      </Fields>
+      <Constructors>
+        <Constructor visibility="public"/>
+      </Constructors>
+      <Methods>
+        <Method name="getAllNotes" returnType="ArrayList&lt;EncryptedNote&gt;" visibility="public">
+          <Argument type="ECDSASignerVerifier" name="signerOrVerfier"/>
+        </Method>
+        <Method name="addOrUpdate" returnType="void" visibility="public">
+          <Argument type="EncryptedNote" name="note"/>
+        </Method>
+      </Methods>
+    </Class>
+    <Class name="Note" package="com.github.adam_currie.fusenotesclient" visibility="public" xPosition="2163.0" yPosition="50.0">
+      <Fields>
+        <Field name="encryptedNote" type="EncryptedNote" visibility="private" isFinal="true"/>
+        <Field name="noteListener" type="NoteListener" visibility="private" isFinal="true"/>
+        <Field name="aes" type="AESEncryption" visibility="private" isFinal="true"/>
+      </Fields>
+      <Constructors>
+        <Constructor visibility="package">
+          <Argument type="EncryptedNote" name="encryptedNote"/>
+          <Argument type="AESEncryption" name="aes"/>
+          <Argument type="NoteListener" name="listener"/>
+        </Constructor>
+        <Constructor visibility="package">
+          <Argument type="ECDSASignerVerifier" name="signer"/>
+          <Argument type="AESEncryption" name="aes"/>
+          <Argument type="NoteListener" name="listener"/>
+        </Constructor>
+      </Constructors>
+      <Methods>
+        <Method name="getCreateDate" returnType="Timestamp" visibility="public"/>
+        <Method name="getEditDate" returnType="Timestamp" visibility="public"/>
+        <Method name="getNoteBody" returnType="String" visibility="public"/>
+        <Method name="setNoteBody" returnType="void" visibility="public">
+          <Argument type="String" name="text"/>
+        </Method>
+        <Method name="delete" returnType="void" visibility="public"/>
+        <Method name="getEncryptedNote" returnType="EncryptedNote" visibility="package"/>
+        <Method name="getDeleted" returnType="boolean" visibility="public"/>
+      </Methods>
+    </Class>
+    <Class name="NoteStore" package="com.github.adam_currie.fusenotesclient" visibility="public" xPosition="133.0" yPosition="39.0">
+      <Fields>
+        <Field name="LAST_SERVER_SYNC_PATH" type="String" visibility="private" isStatic="true" isFinal="true"/>
+        <Field name="storeListener" type="NoteStoreListener" visibility="private"/>
+        <Field name="URL_STR" type="String" visibility="private" isFinal="true"/>
+        <Field name="url" type="URL" visibility="private"/>
+        <Field name="db" type="LocalDB" visibility="private"/>
+        <Field name="notes" type="CopyOnWriteArrayList&lt;Note&gt;" visibility="private"/>
+        <Field name="aes" type="AESEncryption" visibility="private" isFinal="true"/>
+        <Field name="signer" type="ECDSASignerVerifier" visibility="private" isFinal="true"/>
+        <Field name="ses" type="ScheduledExecutorService" visibility="private"/>
+        <Field name="server" type="ServerConnection" visibility="private"/>
+      </Fields>
+      <Constructors>
+        <Constructor visibility="public">
+          <Argument type="String" name="privateKeyStr"/>
+          <Argument type="int" name="syncIntertvalSeconds"/>
+          <Argument type="NoteStoreListener" name="storeListener"/>
+        </Constructor>
+      </Constructors>
+      <Methods>
+        <Method name="generateKey" returnType="String" visibility="public" isStatic="true"/>
+        <Method name="checkKeyValid" returnType="boolean" visibility="public" isStatic="true">
+          <Argument type="String" name="keyStr"/>
+        </Method>
+        <Method name="createNote" returnType="Note" visibility="public">
+          <Argument type="boolean" name="waitForEdit"/>
+        </Method>
+        <Method name="getPrivateKey" returnType="String" visibility="public"/>
+        <Method name="noteChanged" returnType="void" visibility="public">
+          <Argument type="Note" name="note"/>
+          <Argument type="EncryptedNote" name="subNote"/>
+        </Method>
+        <Method name="close" returnType="void" visibility="public"/>
+        <Method name="shutdown" returnType="void" visibility="public"/>
+      </Methods>
+    </Class>
+    <Class name="ServerConnection" package="com.github.adam_currie.fusenotesclient" visibility="public" xPosition="702.0" yPosition="973.0">
+      <Fields>
+        <Field name="saveFile" type="File" visibility="private"/>
+        <Field name="url" type="URL" visibility="private"/>
+        <Field name="lastSync" type="Timestamp" visibility="private"/>
+      </Fields>
+      <Constructors>
+        <Constructor visibility="package">
+          <Argument type="String" name="urlStr"/>
+          <Argument type="NoteListener" name="listener"/>
+          <Argument type="AESEncryption" name="aes"/>
+          <Argument type="ECDSASignerVerifier" name="signer"/>
+        </Constructor>
+      </Constructors>
+      <Methods>
+        <Method name="loadLastSync" returnType="void" visibility="private"/>
+        <Method name="getNoteUpdates" returnType="ArrayList&lt;Note&gt;" visibility="package">
+          <Argument type="ECDSASignerVerifier" name="signerOrVerfier"/>
+        </Method>
+      </Methods>
+    </Class>
+    <Interface name="NoteListener" package="com.github.adam_currie.fusenotesclient" visibility="public" xPosition="1222.0" yPosition="228.0">
+      <Methods>
+        <Method name="noteChanged" returnType="void" visibility="package">
+          <Argument type="Note" name="note"/>
+          <Argument type="EncryptedNote" name="partialSnapshot"/>
+        </Method>
+      </Methods>
+    </Interface>
+  </ClassDiagramComponents>
+  <ClassDiagramRelations>
+    <UseRelation source="com.github.adam_currie.fusenotesclient.LocalDB" target="com.github.adam_currie.fusenotesclient.Note" sourceCardinality="1..1" targetCardinality="1..1"/>
+    <HasRelation name="noteListener" source="com.github.adam_currie.fusenotesclient.Note" target="com.github.adam_currie.fusenotesclient.NoteListener" type="Aggregation" sourceCardinality="1..1" targetCardinality="0..*" collectionType="NoteListener"/>
+    <UseRelation source="com.github.adam_currie.fusenotesclient.NoteStore" target="com.github.adam_currie.fusenotesclient.Note" sourceCardinality="1..1" targetCardinality="1..1"/>
+    <HasRelation name="db" source="com.github.adam_currie.fusenotesclient.NoteStore" target="com.github.adam_currie.fusenotesclient.LocalDB" type="Aggregation" sourceCardinality="1..1" targetCardinality="1..1"/>
+    <HasRelation name="server" source="com.github.adam_currie.fusenotesclient.NoteStore" target="com.github.adam_currie.fusenotesclient.ServerConnection" type="Aggregation" sourceCardinality="1..1" targetCardinality="1..1"/>
+    <UseRelation source="com.github.adam_currie.fusenotesclient.Note" target="com.github.adam_currie.fusenotesclient.Note" sourceCardinality="1..1" targetCardinality="1..1"/>
+    <UseRelation source="com.github.adam_currie.fusenotesclient.ServerConnection" target="com.github.adam_currie.fusenotesclient.Note" sourceCardinality="1..1" targetCardinality="1..1"/>
+    <HasRelation name="notes" source="com.github.adam_currie.fusenotesclient.NoteStore" target="com.github.adam_currie.fusenotesclient.Note" type="Aggregation" sourceCardinality="1..1" targetCardinality="0..*" collectionType="CopyOnWriteArrayList&lt;Note&gt;"/>
+    <UseRelation source="com.github.adam_currie.fusenotesclient.NoteListener" target="com.github.adam_currie.fusenotesclient.Note" sourceCardinality="1..1" targetCardinality="1..1"/>
+    <HasRelation name="aes" source="com.github.adam_currie.fusenotesclient.Note" target="com.github.adam_currie.fusenotesclient.AESEncryption" type="Aggregation" sourceCardinality="1..1" targetCardinality="1..1"/>
+    <ImplementsRelation name="&lt;&lt;implements&gt;&gt;" source="com.github.adam_currie.fusenotesclient.NoteStore" target="com.github.adam_currie.fusenotesclient.NoteListener"/>
+    <HasRelation name="aes" source="com.github.adam_currie.fusenotesclient.NoteStore" target="com.github.adam_currie.fusenotesclient.AESEncryption" type="Aggregation" sourceCardinality="1..1" targetCardinality="1..1"/>
+  </ClassDiagramRelations>
+</ClassDiagram>

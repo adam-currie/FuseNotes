@@ -23,11 +23,10 @@
  */
 package com.github.adam_currie.fusenotesshared;
 
+import java.io.Serializable;
 import java.security.SecureRandom;
 import java.sql.Timestamp;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -42,47 +41,41 @@ import java.util.concurrent.locks.ReentrantLock;
  * can be used in conjunction with the data they sign.
  * @author Adam Currie
  */
-public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
+public class EncryptedNote implements Iterable<EncryptedNote.Fragment>, Serializable{
     private static final SecureRandom random = new SecureRandom();
     
     private final NoteID noteID;
     private final Timestamp createDate;
-    private final ThreadSafeECDSASigner signer;
-    
-    private ConcurrentSkipListSet<Fragment> sortedFragments = new ConcurrentSkipListSet<>();
-    
-    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-    
-    ReentrantLock signatureLock = new ReentrantLock();//todo: signatureLock when writing
+    private final ECDSASignerVerifier signerVerifier;
+    private final ConcurrentSkipListSet<Fragment> sortedFragments = new ConcurrentSkipListSet<>();
+    private final ReentrantLock signatureLock = new ReentrantLock();
     
     /*
-     * only access these fields atomically so that they don't need to be locked for reads, 
-     * signatureLock is only used for writes and snapshots to make sure the signature is synced up with the data
+     * signatureLock is used for these for writes and snapshots to make sure the signature is synced up with the data
      */
-        private Timestamp metaEditDate;//only set by changing reference, not value, would break thread safety
+        private Timestamp metaEditDate;
         private AtomicBoolean isDeleted = new AtomicBoolean();
         private ECDSASignature signature;
             
     
     //todo: maybe check signature stuff in constructor, and logical checks
     //clones the byte arrays and timestamps
-    public EncryptedNote(NoteID noteID, ThreadSafeECDSASigner signer, Timestamp createDate, Timestamp editDate, boolean isDeleted, ECDSASignature signature){
+    public EncryptedNote(NoteID noteID, ECDSASignerVerifier signerVerifier, Timestamp createDate, Timestamp editDate, boolean isDeleted, ECDSASignature signature){
         this.noteID = noteID;
         this.createDate = (Timestamp)createDate.clone();
         this.metaEditDate = (Timestamp)editDate.clone();
         this.isDeleted.set(isDeleted);
         this.signature = signature;
-        this.signer = signer;
+        this.signerVerifier = signerVerifier;
     }
     
-    public EncryptedNote(ThreadSafeECDSASigner signer){
+    public EncryptedNote(ECDSASignerVerifier signer){
         noteID = new NoteID();
         createDate = new Timestamp(System.currentTimeMillis());
         metaEditDate = new Timestamp(System.currentTimeMillis());
         isDeleted.set(false);
         
-        this.signer = signer;
-        
+        this.signerVerifier = signer;
         sign();
     }
     
@@ -114,9 +107,9 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
      * Use {@link #getMetaEditDate() getMetaEditDate} to get just the last time the meta data of the note itself changed.
      * @return last edited date/time
      */
-    public Timestamp getEditDate(){
+    public Timestamp getCompositeEditDate(){
         Timestamp latest = metaEditDate;
-        
+        //todo: cache composite date
         Fragment last = null; 
         try{
             last = sortedFragments.last();
@@ -132,7 +125,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     /**
      * Returns the last time the meta data of the note changed.
      * This date is only updated when information about the note itself is changed, as opposed to a fragment.
-     * Use {@link #getEditDate() getEditDate} to get the last time the note or the latest fragment changed.
+     * Use {@link #getCompositeEditDate() getCompositeEditDate} to get the last time the note or the latest fragment changed.
      * Must be cloned to avoid changing underlying data.
      * @return the edit date/time
      */
@@ -148,8 +141,8 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
         }
     }
 
-    public ThreadSafeECDSASigner getSigner(){
-        return signer;
+    public ECDSASignerVerifier getSigner(){
+        return signerVerifier;
     }
 
     /**
@@ -160,7 +153,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     public EncryptedNote getMetaDataSnapshot(){
         signatureLock.lock();
         try{
-            return new EncryptedNote(noteID, signer, createDate, metaEditDate, isDeleted.get(), signature);
+            return new EncryptedNote(noteID, signerVerifier, createDate, metaEditDate, isDeleted.get(), signature);
         }finally{
             signatureLock.unlock();
         }
@@ -190,7 +183,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     }
 
     public byte[] getUserID(){
-        return signer.getPublicKeyBytes();
+        return signerVerifier.getPublicKeyBytes();
     }
 
     public boolean getDeleted(){
@@ -230,19 +223,18 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
     }
 
     private void sign(){
-        signature = signer.sign("" + noteID + createDate + metaEditDate + isDeleted);
+        signature = signerVerifier.sign("" + noteID + createDate + metaEditDate + isDeleted);
     }    
     
-    public class Fragment implements Comparable<Fragment>{        
+    public class Fragment implements Comparable<Fragment>, Serializable{        
         private final FragmentID fragmentID;
         private final Timestamp fragCreateDate;
-        private ReentrantLock signatureLock = new ReentrantLock();
+        private final ReentrantLock signatureLock = new ReentrantLock();
         
         /*
-         * only access these fields atomically so that they don't need to be locked for reads, 
-         * signatureLock is only used for writes and snapshots to make sure the signature is synced up with the data
+         * signatureLock is used for these for writes and snapshots to make sure the signature is synced up with the data
          */
-            private Timestamp fragEditDate;//only set by changing reference, not value, would break thread safety
+            private Timestamp fragEditDate;
             private AtomicBoolean fragIsDeleted = new AtomicBoolean();
             private String noteBody;
             private ECDSASignature fragSignature;
@@ -306,7 +298,7 @@ public class EncryptedNote implements Iterable<EncryptedNote.Fragment>{
         
         //todo: check that the tostring method for these accurately represents them, same for the frag version
         private void sign(){
-            fragSignature = signer.sign(noteBody + noteID + fragmentID + fragCreateDate + fragEditDate + fragIsDeleted);
+            fragSignature = signerVerifier.sign(noteBody + noteID + fragmentID + fragCreateDate + fragEditDate + fragIsDeleted);
         }
         
         /**

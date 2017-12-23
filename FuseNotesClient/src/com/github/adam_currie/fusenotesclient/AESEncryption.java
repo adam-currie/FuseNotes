@@ -82,7 +82,7 @@ class AESEncryption {
     
     /*
      * Method           AESEncryption
-     * Description      Creates AESEncryption with a key.
+     * Description      Creates instance with a key.
      * Params       
      *  String KeyStr   AES key in base64.      
      */

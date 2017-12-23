@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<ClassDiagram name="FuseNotesDesktop">
+  <ClassDiagramComponents>
+    <Class name="ChangeKeyJPanel" package="com.github.adam_currie.fusenotesdesktop" visibility="public" xPosition="20.0" yPosition="20.0">
+      <Fields>
+        <Field name="mainFrame" type="MainJFrame" visibility="private"/>
+        <Field name="cancelButton" type="javax.swing.JButton" visibility="private"/>
+        <Field name="generateButton" type="javax.swing.JButton" visibility="private"/>
+        <Field name="jLabel1" type="javax.swing.JLabel" visibility="private"/>
+        <Field name="jLabel2" type="javax.swing.JLabel" visibility="private"/>
+        <Field name="jLabel3" type="javax.swing.JLabel" visibility="private"/>
+        <Field name="okButton" type="javax.swing.JButton" visibility="private"/>
+        <Field name="passwordField" type="javax.swing.JTextField" visibility="private"/>
+      </Fields>
+      <Constructors>
+        <Constructor visibility="public">
+          <Argument type="MainJFrame" name="mainFrame"/>
+        </Constructor>
+        <Constructor visibility="public">
+          <Argument type="MainJFrame" name="mainFrame"/>
+          <Argument type="String" name="key"/>
+        </Constructor>
+      </Constructors>
+      <Methods>
+        <Method name="initComponents" returnType="// &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot;Generated Code&quot;&gt;//GEN-BEGIN:initComponents void" visibility="private"/>
+        <Method name="okButtonActionPerformed" returnType="void" visibility="private">
+          <Argument type="java.awt.event.ActionEvent" name="evt"/>
+        </Method>
+        <Method name="cancelButtonActionPerformed" returnType="void" visibility="private">
+          <Argument type="java.awt.event.ActionEvent" name="evt"/>
+        </Method>
+        <Method name="generateButtonActionPerformed" returnType="void" visibility="private">
+          <Argument type="java.awt.event.ActionEvent" name="evt"/>
+        </Method>
+      </Methods>
+    </Class>
+    <Class name="MainJFrame" package="com.github.adam_currie.fusenotesdesktop" visibility="public" xPosition="314.0" yPosition="431.0">
+      <Fields>
+        <Field name="KEY_PATH" type="String" visibility="private" isStatic="true" isFinal="true"/>
+        <Field name="SYN_INTERVAL_SECONDS" type="int" visibility="private" isStatic="true" isFinal="true"/>
+        <Field name="notes" type="NoteStore" visibility="private"/>
+        <Field name="addButton" type="javax.swing.JButton" visibility="private"/>
+        <Field name="changePassButton" type="javax.swing.JMenuItem" visibility="private"/>
+        <Field name="jMenu1" type="javax.swing.JMenu" visibility="private"/>
+        <Field name="jMenu2" type="javax.swing.JMenu" visibility="private"/>
+        <Field name="jMenuBar1" type="javax.swing.JMenuBar" visibility="private"/>
+        <Field name="jPanel1" type="javax.swing.JPanel" visibility="private"/>
+        <Field name="notesListPanel" type="javax.swing.JPanel" visibility="private"/>
+        <Field name="notesScrollPane" type="javax.swing.JScrollPane" visibility="private"/>
+      </Fields>
+      <Constructors>
+        <Constructor visibility="public"/>
+      </Constructors>
+      <Methods>
+        <Method name="getNoteStore" returnType="NoteStore" visibility="public"/>
+        <Method name="initComponents" returnType="// &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot;Generated Code&quot;&gt;//GEN-BEGIN:initComponents void" visibility="private"/>
+        <Method name="changePassButtonActionPerformed" returnType="void" visibility="private">
+          <Argument type="java.awt.event.ActionEvent" name="evt"/>
+        </Method>
+        <Method name="addButtonActionPerformed" returnType="void" visibility="private">
+          <Argument type="java.awt.event.ActionEvent" name="evt"/>
+        </Method>
+        <Method name="changePassword" returnType="boolean" visibility="public">
+          <Argument type="String" name="password"/>
+        </Method>
+        <Method name="main" returnType="void" visibility="public" isStatic="true">
+          <Argument type="String" name="args"/>
+        </Method>
+        <Method name="showKeyChangeDlg" returnType="void" visibility="private"/>
+        <Method name="savePassword" returnType="void" visibility="private">
+          <Argument type="String" name="password"/>
+        </Method>
+        <Method name="loadPassword" returnType="String" visibility="private"/>
+        <Method name="initNoteStore" returnType="void" visibility="private"/>
+        <Method name="notesLoaded" returnType="void" visibility="public">
+          <Argument type="Iterator&lt;Note&gt;" name="iterator"/>
+        </Method>
+        <Method name="noteUpdateLoaded" returnType="void" visibility="public">
+          <Argument type="Note" name="note"/>
+        </Method>
+      </Methods>
+    </Class>
+    <Class name="NoteJPanel" package="com.github.adam_currie.fusenotesdesktop" visibility="public" xPosition="1110.0" yPosition="197.0">
+      <Fields>
+        <Field name="dateFormat" type="SimpleDateFormat" visibility="private" isStatic="true"/>
+        <Field name="mainFrame" type="MainJFrame" visibility="private"/>
+        <Field name="note" type="Note" visibility="private"/>
+        <Field name="cancelButton" type="javax.swing.JButton" visibility="private"/>
+        <Field name="confirmPanel" type="javax.swing.JPanel" visibility="private"/>
+        <Field name="createdLabel" type="javax.swing.JLabel" visibility="private"/>
+        <Field name="deleteButton" type="javax.swing.JButton" visibility="private"/>
+        <Field name="editedLabel" type="javax.swing.JLabel" visibility="private"/>
+        <Field name="jPanel1" type="javax.swing.JPanel" visibility="private"/>
+        <Field name="jScrollPane1" type="javax.swing.JScrollPane" visibility="private"/>
+        <Field name="noteTextArea" type="javax.swing.JTextArea" visibility="private"/>
+        <Field name="saveButton" type="javax.swing.JButton" visibility="private"/>
+      </Fields>
+      <Constructors>
+        <Constructor visibility="package">
+          <Argument type="Note" name="note"/>
+          <Argument type="MainJFrame" name="mainFrame"/>
+        </Constructor>
+      </Constructors>
+      <Methods>
+        <Method name="setupDocumentListener" returnType="void" visibility="private"/>
+        <Method name="initComponents" returnType="// &lt;editor-fold defaultstate=&quot;collapsed&quot; desc=&quot;Generated Code&quot;&gt;//GEN-BEGIN:initComponents void" visibility="private"/>
+        <Method name="deleteButtonActionPerformed" returnType="void" visibility="private">
+          <Argument type="java.awt.event.ActionEvent" name="evt"/>
+        </Method>
+        <Method name="cancelButtonActionPerformed" returnType="void" visibility="private">
+          <Argument type="java.awt.event.ActionEvent" name="evt"/>
+        </Method>
+        <Method name="requestFocus" returnType="void" visibility="public"/>
+        <Method name="saveButtonActionPerformed" returnType="void" visibility="private">
+          <Argument type="java.awt.event.ActionEvent" name="evt"/>
+        </Method>
+        <Method name="noteTextChanged" returnType="void" visibility="private"/>
+      </Methods>
+    </Class>
+  </ClassDiagramComponents>
+  <ClassDiagramRelations>
+    <HasRelation name="mainFrame" source="com.github.adam_currie.fusenotesdesktop.ChangeKeyJPanel" target="com.github.adam_currie.fusenotesdesktop.MainJFrame" type="Aggregation" sourceCardinality="1..1" targetCardinality="1..1"/>
+    <HasRelation name="mainFrame" source="com.github.adam_currie.fusenotesdesktop.NoteJPanel" target="com.github.adam_currie.fusenotesdesktop.MainJFrame" type="Aggregation" sourceCardinality="1..1" targetCardinality="1..1"/>
+  </ClassDiagramRelations>
+</ClassDiagram>

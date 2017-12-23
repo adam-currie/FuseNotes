@@ -30,37 +30,40 @@ import java.util.logging.Logger;
 import org.bouncycastle.crypto.InvalidCipherTextException;
 
 /**
- *
+ * 
  * @author Adam Currie
  */
 public class Note{
     private final EncryptedNote encryptedNote;
-    private final NoteListener noteListener;
     private final AESEncryption aes;
     
+    private NoteListener noteListener = null;
     
-    //todo: client changes things with setters, these setters change the underlying not and trigger the updated note to be saved to the db and sent to the server
+    
+    //todo: client changes things with setters, these setters change the underlying note and trigger the updated note to be saved to the db and sent to the server
     
     //hidden from public
     //listener is for internal use
-    Note(EncryptedNote encryptedNote, AESEncryption aes, NoteListener listener){
+    Note(EncryptedNote encryptedNote, AESEncryption aes){
         if(!encryptedNote.getSigner().canSign()){
             throw new IllegalArgumentException("encryptedNote is not setup for signing");
         }
         this.encryptedNote = encryptedNote;
-        noteListener = listener;
         this.aes = aes;
     }
     
     //hidden from public
     //listener is for internal use(within the package)
-    Note(ThreadSafeECDSASigner signer, AESEncryption aes, NoteListener listener){
+    Note(ECDSASignerVerifier signer, AESEncryption aes){
         if(!signer.canSign()){
             throw new IllegalArgumentException("signer is not setup for signing");
         }
         encryptedNote = new EncryptedNote(signer);
         this.aes = aes;
-        noteListener = listener;
+    }
+    
+    void setNoteListener(NoteListener nl){
+        noteListener = nl;
     }
 
 /*
@@ -74,13 +77,13 @@ public class Note{
     }
         
     /*
-     * Method           getEditDate
+     * Method           getCompositeEditDate
      * Description      returns the time that the note was last edited
      * Returns
      *  Timestamp       edit date/time
      */
     public Timestamp getEditDate(){
-        return encryptedNote.getEditDate();
+        return encryptedNote.getCompositeEditDate();
     }
 
     public String getNoteBody(){
@@ -100,7 +103,10 @@ public class Note{
 
     public void setNoteBody(String text){
         EncryptedNote subNote = encryptedNote.setNoteBody(aes.encrypt(text));
-        noteListener.noteChanged(this, subNote);
+        
+        //cache to avoid race condition
+        NoteListener nl = noteListener;
+        if(nl != null) nl.noteChanged(this, subNote);
     }
 
     /*
@@ -109,7 +115,10 @@ public class Note{
      */
     public void delete(){
         encryptedNote.delete();
-        noteListener.noteChanged(this, encryptedNote.getSnapshot());
+        
+        //cache to avoid race condition
+        NoteListener nl = noteListener;
+        if(nl != null) nl.noteChanged(this, encryptedNote.getSnapshot());
     }
 
     EncryptedNote getEncryptedNote(){

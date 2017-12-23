@@ -24,10 +24,8 @@
 package com.github.adam_currie.fusenotesclient;
 
 import com.github.adam_currie.fusenotesshared.ECDSASignature;
-import com.github.adam_currie.fusenotesshared.ThreadSafeECDSASigner;
 import com.github.adam_currie.fusenotesshared.EncryptedNote;
 import com.github.adam_currie.fusenotesshared.FragmentID;
-import com.github.adam_currie.fusenotesshared.NoteDatabase;
 import com.github.adam_currie.fusenotesshared.NoteID;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -36,16 +34,20 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+
+//todo: make this class multi threaded so that calling code doesnt need to reduce the amount of code in NoteStore related to the db
 
 /**
  *
  * @author Adam Currie
  */
-public class LocalDB implements NoteDatabase{
+public class LocalDB{
+    private static final String URL_STR = "jdbc:sqlite:local.db";
     
-    private final String URL_STR = "jdbc:sqlite:local.db";
-    
-    public LocalDB() throws SQLException{
+    static {        
         try(Connection connection = DriverManager.getConnection(URL_STR)){
             PreparedStatement noteStatement = connection.prepareStatement(
                     "CREATE TABLE IF NOT EXISTS note (" +
@@ -73,41 +75,41 @@ public class LocalDB implements NoteDatabase{
                     ")"
             );
             noteFragmentStatement.execute(); 
+        }catch(SQLException ex){
+            Logger.getLogger(LocalDB.class.getName()).log(Level.SEVERE, null, ex);
+            System.exit(-1);
         }
     }    
     
-    @Override
-    public ArrayList<EncryptedNote> getAllNotes(ThreadSafeECDSASigner signerOrVerfier) throws SQLException{
+    public static ArrayList<Note> getAllNotes(NoteFactory factory) throws SQLException{
+        ArrayList<Note> notes = new ArrayList<>();
+        
         try(Connection connection = DriverManager.getConnection(URL_STR)) {      
             PreparedStatement statement = connection.prepareStatement(
                     "SELECT * FROM note WHERE user_id=?");
-            statement.setBytes(1, signerOrVerfier.getPublicKeyBytes());
+            statement.setBytes(1, factory.getUserID());
             ResultSet noteResults = statement.executeQuery();
             
             //setup for getting fragments
             statement = connection.prepareStatement(
                     "SELECT * FROM note_fragment WHERE note_id=?");
             
-            ArrayList<EncryptedNote> notes = new ArrayList();
             while(noteResults.next()){
                 
                 //GET NOTE META DATA
-                EncryptedNote note = new EncryptedNote(
+                Note note = factory.createNote(
                     NoteID.fromBytes(noteResults.getBytes("note_id")),
-                    signerOrVerfier,
                     noteResults.getTimestamp("creation"),
                     noteResults.getTimestamp("meta_edit"),
                     noteResults.getBoolean("deleted"),
                     ECDSASignature.fromBytes(noteResults.getBytes("signature"))
                 );
                 
-                System.out.println(Arrays.toString(note.getSignature().toBytes()));//debug
-                
                 //GET NOTE FRAGMENTS
-                statement.setBytes(1, note.getNoteId().toBytes());
+                statement.setBytes(1, note.getEncryptedNote().getNoteId().toBytes());
                 ResultSet fragResults = statement.executeQuery();
                 while(fragResults.next()){
-                    note.addFragment(
+                    note.getEncryptedNote().addFragment(
                         FragmentID.fromBytes(fragResults.getBytes("fragment_id")),
                         fragResults.getTimestamp("creation"),
                         fragResults.getTimestamp("edit"),
@@ -119,20 +121,21 @@ public class LocalDB implements NoteDatabase{
                 
                 notes.add(note);
             }
-            
-            return notes;
         }
+        
+        return notes;
     }
 
     /**
      * Does not take a snapshot of the note before saving, 
-     * a snapshot of a note must be taken first and used here if the note is being used by multiple threads.
+     * a snapshot of a note must be taken first and used here if the en is being used by multiple threads.
      * @param note  the note to add to the db
      * @throws SQLException 
      */
-    @Override
-    public void addOrUpdate(EncryptedNote note) throws SQLException{
-        byte[] noteIDBytes = note.getNoteId().toBytes();
+    public static void addOrUpdate(Note note) throws SQLException{
+        EncryptedNote en = note.getEncryptedNote();//todo: fix this, saving a note note just an encrypted note
+        
+        byte[] noteIDBytes = en.getNoteId().toBytes();
         
         try(Connection connection = DriverManager.getConnection(URL_STR)){
             connection.setAutoCommit(false);
@@ -142,13 +145,13 @@ public class LocalDB implements NoteDatabase{
                     "REPLACE INTO note (note_id,user_id,creation,meta_edit,deleted,signature) VALUES (?, ?, ?, ?, ?, ?) ");
 
             statement.setBytes(1, noteIDBytes);
-            statement.setBytes(2, note.getUserID());
-            statement.setTimestamp(3, note.getCreateDate());
-            statement.setTimestamp(4, note.getMetaEditDate());
-            statement.setBoolean(5, note.getDeleted());
-            statement.setBytes(6, note.getSignature().toBytes());
+            statement.setBytes(2, en.getUserID());
+            statement.setTimestamp(3, en.getCreateDate());
+            statement.setTimestamp(4, en.getMetaEditDate());
+            statement.setBoolean(5, en.getDeleted());
+            statement.setBytes(6, en.getSignature().toBytes());
             
-            System.out.println(Arrays.toString(note.getSignature().toBytes()));//debug
+            System.out.println(Arrays.toString(en.getSignature().toBytes()));//debug
             
             statement.execute();  
             
@@ -156,7 +159,7 @@ public class LocalDB implements NoteDatabase{
             statement = connection.prepareStatement(
                     "REPLACE INTO note_fragment (note_id,fragment_id,creation,edit,deleted,note_body,signature) VALUES (?, ?, ?, ?, ?, ?, ?) ");
             
-            for(EncryptedNote.Fragment frag : note){
+            for(EncryptedNote.Fragment frag : en){
                 statement.setBytes(1, noteIDBytes);
                 statement.setBytes(2, frag.getFragmentId().toBytes());
                 statement.setTimestamp(3, frag.getCreateDate());
@@ -173,5 +176,4 @@ public class LocalDB implements NoteDatabase{
             connection.commit();
         }
     }
-    
 }

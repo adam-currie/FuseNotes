@@ -28,22 +28,22 @@ import org.bouncycastle.crypto.params.ECPrivateKeyParameters;
 import org.bouncycastle.crypto.params.ECPublicKeyParameters;
 import org.bouncycastle.crypto.signers.ECDSASigner;
 
-/**
- *
+/**\
+ * Provides thread-safe verifying and optionally signing.
  * @author Adam Currie
  */
-public class ThreadSafeECDSASigner{
+public class ECDSASignerVerifier{
     private final ECPrivateKeyParameters privateKey;
     private final ECPublicKeyParameters publicKey;
     
     //initialize for signing and verifying
-    public ThreadSafeECDSASigner(ECPrivateKeyParameters key){        
+    public ECDSASignerVerifier(ECPrivateKeyParameters key){        
         this.privateKey = key;
         this.publicKey = ECDSAUtil.toPublicKeyParams(privateKey);
     }
     
     //initialize for verifying
-    public ThreadSafeECDSASigner(ECPublicKeyParameters key){
+    public ECDSASignerVerifier(ECPublicKeyParameters key){
         this.privateKey = null;
         this.publicKey = ECDSAUtil.toPublicKeyParams(privateKey);
     }
@@ -63,8 +63,6 @@ public class ThreadSafeECDSASigner{
         signer.init(true, privateKey);
         
         return new ECDSASignature(signer.generateSignature(msgBytes));
-
-        
     }
     
     public boolean checkSignature(String message, ECDSASignature signature){

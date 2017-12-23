@@ -21,20 +21,33 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-package com.github.adam_currie.fusenotesshared;
+package com.github.adam_currie.fusenotesclient;
 
-import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.concurrent.CopyOnWriteArrayList;
 
-/*
- * Name     NoteDatabase
- * Purpose  Data access layer for notes database.
+/**
+ * 
+ * @author Adam Currie
  */
-public interface NoteDatabase{
+class NoteContainer{
+    protected final Collection<Note> notes;
+    protected final NoteFactory noteFactory;
     
-    //attaches signerOrVerifier to the loaded notes, also used to specify the userId/public key associated with the notes 
-    public ArrayList<EncryptedNote> getAllNotes(ECDSASignerVerifier signerOrVerifier) throws SQLException;//todo, version of this in ServerDatabase that takes date
-    
-    public void addOrUpdate(EncryptedNote note) throws SQLException;
-}
+    NoteContainer(NoteFactory factory, boolean threadSafe){
+        this.noteFactory = factory;
+        
+        if(threadSafe){
+            notes = new CopyOnWriteArrayList<>();
+        }else{
+            notes = new ArrayList<>();
+        }
+    }
 
+    public Note addNote(){
+        Note n = noteFactory.createNote();
+        notes.add(n);
+        return n;
+    }
+}
